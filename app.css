@@ -1933,3 +1933,19 @@ small { font-size: 12px; }
 .feed-row { display: flex; gap: 7px; }
 .feed-row input { flex: 1; min-width: 0; }
 .feed-row select { flex: none; min-width: 96px; }
+
+/* ══ خبرِ نسخهٔ تازه ══ */
+.update-banner {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--accent-soft); border: 1px solid var(--accent);
+  border-radius: var(--radius-sm); padding: 11px 15px; margin-bottom: 14px;
+}
+.update-body { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 2px; }
+.update-body strong { font-size: 13.5px; color: var(--accent-text); }
+.update-body span { font-size: 12.5px; color: var(--text-2); }
+.update-acts { display: flex; gap: 7px; flex: none; }
+.btn-link {
+  background: none; border: 0; padding: 0 6px; font: inherit; font-size: 12px;
+  font-weight: 700; color: var(--accent-text); cursor: pointer;
+}
+.btn-link:hover { text-decoration: underline; }

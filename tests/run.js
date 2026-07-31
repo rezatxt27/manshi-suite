@@ -1848,6 +1848,80 @@ t('peopleFiles گروه‌بندی درست', () => {
     });
   }
 
+  // ═══════ بررسی نسخهٔ تازه ═══════
+  console.log('\n— نسخهٔ تازه —');
+  {
+    const U = require('../core/update.js');
+    t('نسخه: رقم فارسی و v ابتدایی خوانده می‌شود', () => {
+      assert.deepStrictEqual(U.parseVersion('۰٫۹٫۶'), [0, 9, 6]);
+      assert.deepStrictEqual(U.parseVersion('v1.2.3'), [1, 2, 3]);
+      assert.deepStrictEqual(U.parseVersion('0.9.6'), [0, 9, 6]);
+      assert.deepStrictEqual(U.parseVersion('  V2.0 '), [2, 0]);
+    });
+    t('نسخه: ورودی بی‌معنی null می‌دهد', () => {
+      for (const v of ['', null, undefined, 'نسخه', {}]) assert.strictEqual(U.parseVersion(v), null, String(v));
+    });
+    t('نسخه: مقایسه درست است', () => {
+      assert.strictEqual(U.compareVersions('1.0.0', '0.9.9'), 1);
+      assert.strictEqual(U.compareVersions('0.9.9', '1.0.0'), -1);
+      assert.strictEqual(U.compareVersions('0.9.6', '0.9.6'), 0);
+    });
+    // ۰٫۹٫۱۰ باید از ۰٫۹٫۹ تازه‌تر باشد — مقایسهٔ رشته‌ای اینجا می‌شکند
+    t('نسخه: ۰٫۹٫۱۰ از ۰٫۹٫۹ تازه‌تر است', () =>
+      assert.strictEqual(U.compareVersions('0.9.10', '0.9.9'), 1));
+    t('نسخه: طولِ نابرابر درست حل می‌شود', () => {
+      assert.strictEqual(U.compareVersions('1.0', '1.0.0'), 0);
+      assert.strictEqual(U.compareVersions('1.0.1', '1.0'), 1);
+    });
+    t('نسخه: فقط نسخهٔ بالاتر «تازه» است', () => {
+      assert.ok(U.isNewer('0.9.7', '0.9.6'));
+      assert.ok(!U.isNewer('0.9.6', '0.9.6'));
+      assert.ok(!U.isNewer('0.9.5', '0.9.6'), 'نسخهٔ قدیمی‌تر نباید پیشنهاد شود');
+    });
+    t('ریلیز: پاسخ سالم خوانده می‌شود', () => {
+      const r = U.parseRelease(JSON.stringify({
+        tag_name: 'v0.9.7', name: 'منشی ۰٫۹٫۷', body: 'چند اصلاح',
+        html_url: 'https://github.com/rezatxt27/manshi-suite/releases/tag/v0.9.7',
+        published_at: '2026-08-01T10:00:00Z'
+      }));
+      assert.strictEqual(r.version, '0.9.7');
+      assert.strictEqual(r.name, 'منشی ۰٫۹٫۷');
+      assert.ok(r.url.startsWith('https://github.com/'));
+    });
+    t('ریلیز: پیش‌نویس نادیده گرفته می‌شود', () =>
+      assert.strictEqual(U.parseRelease(JSON.stringify({ tag_name: 'v9.9.9', draft: true })), null));
+    t('ریلیز: پاسخ خراب صفحه را نمی‌شکند', () => {
+      for (const bad of ['', 'نه JSON', '{}', 'null', '[]', JSON.stringify({ tag_name: 'بدون عدد' })])
+        assert.strictEqual(U.parseRelease(bad), null, String(bad).slice(0, 14));
+    });
+    // آدرس از پاسخِ بیرونی می‌آید، پس نباید هرچه بود پذیرفته شود
+    t('ریلیز: آدرسِ غیرگیت‌هاب یا غیر https رد می‌شود', () => {
+      const evil = ['javascript:alert(1)', 'http://github.com/x', 'https://evil.com/x', 'https://github.com.evil.com/x'];
+      for (const u of evil) {
+        const r = U.parseRelease(JSON.stringify({ tag_name: 'v1.0.0', html_url: u }));
+        assert.strictEqual(r.url, U.PAGE, u);
+      }
+    });
+    t('ریلیز: زیردامنهٔ گیت‌هاب پذیرفته می‌شود', () => {
+      const r = U.parseRelease(JSON.stringify({ tag_name: 'v1.0.0', html_url: 'https://www.github.com/a/b' }));
+      assert.ok(r.url.includes('github.com'));
+    });
+    t('ریلیز: متنِ خیلی بلند بریده می‌شود', () => {
+      const r = U.parseRelease(JSON.stringify({ tag_name: 'v1.0.0', body: 'x'.repeat(9000), name: 'n'.repeat(500) }));
+      assert.ok(r.notes.length <= 2000 && r.name.length <= 120);
+    });
+    t('زمان‌بندی: روزی یک بار بررسی می‌شود', () => {
+      const now = Date.now();
+      assert.ok(U.dueForCheck(0, now), 'بار اول باید بررسی کند');
+      assert.ok(!U.dueForCheck(now - 3600e3, now), 'یک ساعت بعد نه');
+      assert.ok(U.dueForCheck(now - 25 * 3600e3, now), 'روز بعد بله');
+    });
+    t('امنیت: آدرس API روی https و خودِ گیت‌هاب است', () => {
+      assert.ok(U.API.startsWith('https://api.github.com/'));
+      assert.ok(U.PAGE.startsWith('https://github.com/'));
+    });
+  }
+
   console.log(`\n${passed} گذشت، ${failed} شکست\n`);
   process.exit(failed ? 1 : 0);
 })();

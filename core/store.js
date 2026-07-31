@@ -46,6 +46,9 @@ const Store = (() => {
     focusSession: null,                // تایمر تمرکزِ در جریان
     focusLog: null,                    // { day, rounds, minutes } — جمعِ امروز
     customFeeds: [],                   // منبع‌های خبرِ دستیِ کاربر
+    updateCheckedAt: 0,                // آخرین باری که نسخه بررسی شد
+    updateSeen: '',                    // نسخه‌ای که کاربر بنرش را بسته
+    lastRelease: null,                 // آخرین ریلیزِ دیده‌شده
     looseDismissed: {}     // سرِنخ‌های «از جلسه‌ها چه ماند» که کاربر نادیده گرفته: { کلید: زمان }
   };
 

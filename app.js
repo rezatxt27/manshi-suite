@@ -866,7 +866,9 @@
     const origins = [...new Set([
       ...(heroPrefs.sources.length ? heroPrefs.sources : Object.keys(allFeeds()))
         .filter(k => allFeeds()[k]).map(k => new URL(allFeeds()[k].url).origin + "/*"),
-      ...MARKET_PAGES.map(p => new URL(p.url).origin + '/*')
+      ...MARKET_PAGES.map(p => new URL(p.url).origin + '/*'),
+      // گیت‌هاب هم، تا خبرِ نسخهٔ تازه بتواند برسد
+      new URL(Updater.API).origin + '/*'
     ])];
     try {
       const granted = await chrome.permissions.request({ origins });
@@ -4568,6 +4570,7 @@
       return found || null;
     }).filter(Boolean);
     renderNews(settings);
+    checkUpdateQuietly();
   }
 
   // ---------- کیوسک ----------
@@ -5171,6 +5174,89 @@
     openKioskPrefs($('#kioskPrefsBtn'), s.kioskCards || []);
   });
 
+  // ---------- خبرِ نسخهٔ تازه ----------
+  // منشی از فروشگاه نصب نمی‌شود، پس خودش به‌روز نمی‌شود. فقط خبر می‌دهد.
+  async function fetchRelease() {
+    const origin = new URL(Updater.API).origin + '/*';
+    if (Store.isExt && chrome.permissions) {
+      try {
+        const has = await chrome.permissions.contains({ origins: [origin] });
+        if (!has) return { rel: null, error: 'دسترسی به گیت‌هاب داده نشده' };
+      } catch (_) { /* ادامه بده */ }
+    }
+    let r;
+    try { r = await fetch(Updater.API, { cache: 'no-store', headers: { Accept: 'application/vnd.github+json' } }); }
+    catch (_) { return { rel: null, error: 'گیت‌هاب پاسخ نداد' }; }
+    if (r.status === 404) return { rel: null, error: 'هنوز نسخه‌ای منتشر نشده' };
+    if (!r.ok) return { rel: null, error: `گیت‌هاب خطای ${J.faDigits(r.status)} داد` };
+    let txt = '';
+    try { txt = await r.text(); } catch (_) { return { rel: null, error: 'پاسخ خوانده نشد' }; }
+    const rel = Updater.parseRelease(txt);
+    return rel ? { rel, error: '' } : { rel: null, error: 'پاسخ گیت‌هاب شناخته نشد' };
+  }
+
+  // نسخه یک بار خوانده و نگه داشته می‌شود. پیش‌تر از DOM خوانده می‌شد و چون
+  // خواندنِ manifest ناهمگام است، بررسیِ نسخه گاهی «۰.۰.۰» می‌دید.
+  let currentVersion = '';
+  async function appVersion() {
+    if (currentVersion) return currentVersion;
+    try { currentVersion = chrome?.runtime?.getManifest?.()?.version || ''; } catch (_) {}
+    if (!currentVersion) {
+      try { currentVersion = (await (await fetch('manifest.json', { cache: 'no-store' })).json()).version || ''; }
+      catch (_) { currentVersion = ''; }
+    }
+    return currentVersion;
+  }
+
+  async function paintUpdateBanner(rel, settings) {
+    const box = $('#updateBanner');
+    if (!box) return;
+    const cur = await appVersion();
+    if (!cur) { box.hidden = true; return; }   // تا نسخهٔ خودمان معلوم نشده، چیزی ادعا نکن
+    if (!rel || !Updater.isNewer(rel.version, cur) || settings?.updateSeen === rel.version) {
+      box.hidden = true; return;
+    }
+    box.hidden = false;
+    box.replaceChildren();
+    const body = el('div', 'update-body');
+    body.append(el('strong', null, `نسخهٔ ${J.faDigits(rel.version)} منتشر شد`));
+    body.append(el('span', null, `نسخهٔ تو ${J.faDigits(cur)} است — منشی خودش به‌روز نمی‌شود و باید دستی بگیری.`));
+    box.append(body);
+    const acts = el('div', 'update-acts');
+    const go = el('a', 'btn btn-primary btn-sm', 'دیدن نسخهٔ تازه');
+    go.href = rel.url; go.target = '_blank'; go.rel = 'noopener noreferrer';
+    const later = el('button', 'btn btn-ghost btn-sm', 'بعداً');
+    later.addEventListener('click', async () => {
+      await Store.saveSettings({ updateSeen: rel.version });
+      box.hidden = true;
+    });
+    acts.append(go, later);
+    box.append(acts);
+  }
+
+  // یک بار در روز، بی‌سروصدا؛ خطایش هیچ‌جا دیده نمی‌شود
+  async function checkUpdateQuietly() {
+    const s = await Store.getSettings();
+    if (!Updater.dueForCheck(s.updateCheckedAt)) { await paintUpdateBanner(s.lastRelease, s); return; }
+    const { rel } = await fetchRelease();
+    await Store.saveSettings({ updateCheckedAt: Date.now(), ...(rel ? { lastRelease: rel } : {}) });
+    await paintUpdateBanner(rel || s.lastRelease, s);
+  }
+
+  $('#checkUpdate')?.addEventListener('click', async () => {
+    const st = $('#updateStatus');
+    const say = (m) => { if (st) { st.textContent = m; setTimeout(() => { st.textContent = ''; }, 5000); } };
+    say('در حال بررسی…');
+    const { rel, error } = await fetchRelease();
+    if (error) { say(error); return; }
+    const cur = await appVersion();
+    await Store.saveSettings({ updateCheckedAt: Date.now(), lastRelease: rel, updateSeen: '' });
+    if (Updater.isNewer(rel.version, cur)) {
+      say(`نسخهٔ ${J.faDigits(rel.version)} هست — بالای صفحهٔ «امروز» ببین`);
+      await paintUpdateBanner(rel, { updateSeen: '' });
+    } else say('همین نسخه تازه‌ترین است ✓');
+  });
+
   // ---------- یادداشت روز ----------
   const scratchInput = $('#scratchInput');
   const scratchStatus = $('#scratchStatus');
@@ -5208,15 +5294,11 @@
 
   // ---------- شروع ----------
   // نسخه از manifest خوانده می‌شود تا هیچ‌وقت با عددِ دستی در کد ناهماهنگ نشود
-  function paintVersion() {
+  async function paintVersion() {
     const box = $('#appVersion');
     if (!box) return;
-    let v = '';
-    try { v = chrome?.runtime?.getManifest?.()?.version || ''; } catch (_) {}
-    if (v) { box.textContent = J.faDigits(v); return; }
-    fetch('manifest.json', { cache: 'no-store' }).then(r => r.json())
-      .then(m => { box.textContent = J.faDigits(m.version || '—'); })
-      .catch(() => { box.textContent = '—'; });
+    const v = await appVersion();
+    box.textContent = v ? J.faDigits(v) : '—';
   }
 
   (async () => {

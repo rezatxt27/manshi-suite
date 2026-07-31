@@ -11,19 +11,19 @@
 <div class="app">
 <aside class="rail" aria-label="ماژول‌ها">
   <div class="rail-brand">
-    <!-- نشانِ منشی: «م» فارسی — سرِ گرد با دنبالهٔ رو به چپ. تیکِ عمومیِ قبلی
-         شبیه هر اپلیکیشن کارها بود؛ این یکی هم فارسی است هم در ۱۶ پیکسل خوانا. -->
-    <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+    <!-- نشانِ منشی: حبابِ گفتار + تیک + درخشش. همین هندسه در icon*.png هم هست. -->
+    <svg class="brand-mark" viewBox="0 0 100 100" fill="none" aria-hidden="true">
       <defs>
         <linearGradient id="manshiMark" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#34c08a"/>
-          <stop offset="1" stop-color="#126b47"/>
+          <stop offset="0" stop-color="#3fbe7d"/>
+          <stop offset="1" stop-color="#0d7a45"/>
         </linearGradient>
       </defs>
-      <rect x="0" y="0" width="32" height="32" rx="9.5" fill="url(#manshiMark)"/>
-      <circle cx="18.4" cy="11.9" r="5.6" fill="#fff"/>
-      <circle cx="18.4" cy="11.9" r="2.1" fill="#177951"/>
-      <path d="M18.4 17.5C18.4 22.9 15.2 25.1 9.6 24.6" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/>
+      <rect x="0" y="0" width="100" height="100" rx="24" fill="url(#manshiMark)"/>
+      <path d="M54.5 60 78 84.5 67.5 56.5Z" fill="#fff"/>
+      <rect x="24.5" y="25.5" width="45" height="34" rx="10" stroke="#fff" stroke-width="7" fill="none"/>
+      <path d="M33 43.5 43.5 54 62.5 34" stroke="#fff" stroke-width="7.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <path d="M77 19c1.1 3.9 1.1 3.9 5 5-3.9 1.1-3.9 1.1-5 5-1.1-3.9-1.1-3.9-5-5 3.9-1.1 3.9-1.1 5-5Z" fill="#fff"/>
     </svg>
     <span class="brand-name">منشی</span>
   </div>
@@ -89,6 +89,9 @@
       <div id="teamClock" class="team-clock" hidden></div>
     </div>
   </div>
+
+  <!-- خبرِ نسخهٔ تازه — فقط وقتی واقعاً نسخهٔ بالاتری هست -->
+  <div id="updateBanner" class="update-banner" hidden></div>
 
   <!-- اخبار فناوری — اختیاری، پیش‌فرض خاموش -->
   <section id="newsCard" class="news-card" hidden></section>
@@ -516,6 +519,9 @@
           <button type="button" class="btn btn-ghost btn-sm" id="testNews">بررسی اتصال</button>
           <button type="button" class="btn btn-ghost btn-sm" id="grantNews">دادن دسترسی به سایت‌ها</button>
         </div>
+        <small class="field-hint">این دسترسی شاملِ گیت‌هاب هم می‌شود تا وقتی نسخهٔ تازه‌ای منتشر شد خبردار شوی.</small>
+        <div class="btn-row" style="display:none">
+        </div>
         <div id="newsDiag" class="news-diag" hidden></div>
 
         <!-- منبع دستی: هر فید RSS/Atom دیگری که کاربر بخواهد -->
@@ -550,7 +556,9 @@
     </details>
   </div>
   <p class="settings-foot">منشی هیچ سروری ندارد — همهٔ داده‌ها در حافظهٔ محلی مرورگر شماست. نکته: در نوار آدرس بنویسید «منشی» + فاصله تا از همان‌جا کار ثبت کنید.</p>
-  <p class="settings-version">نسخهٔ <span id="appVersion">—</span></p>
+  <p class="settings-version">نسخهٔ <span id="appVersion">—</span>
+    <button type="button" class="btn-link" id="checkUpdate">بررسی نسخهٔ تازه</button>
+    <span class="field-status" id="updateStatus"></span></p>
 </section>
 
 </main>
@@ -646,6 +654,7 @@
 <script src="core/transcript-cleaner.js"></script>
 <script src="core/search.js"></script>
 <script src="core/kiosk.js"></script>
+<script src="core/update.js"></script>
 <script src="core/market.js"></script>
 <script src="core/mom-core.js"></script>
 <script src="core/store.js"></script>
