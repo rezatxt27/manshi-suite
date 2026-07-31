@@ -1,0 +1,22 @@
+# تنظیمات محلیِ ابزار توسعه — مسیرهای دستگاه خودم در آن است
+.claude/
+
+# پشتیبان و خروجیِ کاربر — هرگز نباید وارد مخزن شود
+*.backup.json
+manshi-backup*.json
+vardast-backup*.json
+*.ics
+
+# سیستم و ویرایشگر
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# بسته‌بندی
+node_modules/
+dist/
+*.zip
+*.crx
+*.pem

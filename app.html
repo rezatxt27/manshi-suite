@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>منشی — دستیار بهره‌وری</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<div class="app">
+<aside class="rail" aria-label="ماژول‌ها">
+  <div class="rail-brand">
+    <!-- نشانِ منشی: «م» فارسی — سرِ گرد با دنبالهٔ رو به چپ. تیکِ عمومیِ قبلی
+         شبیه هر اپلیکیشن کارها بود؛ این یکی هم فارسی است هم در ۱۶ پیکسل خوانا. -->
+    <svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="manshiMark" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#34c08a"/>
+          <stop offset="1" stop-color="#126b47"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="32" height="32" rx="9.5" fill="url(#manshiMark)"/>
+      <circle cx="18.4" cy="11.9" r="5.6" fill="#fff"/>
+      <circle cx="18.4" cy="11.9" r="2.1" fill="#177951"/>
+      <path d="M18.4 17.5C18.4 22.9 15.2 25.1 9.6 24.6" stroke="#fff" stroke-width="3.4" stroke-linecap="round"/>
+    </svg>
+    <span class="brand-name">منشی</span>
+  </div>
+
+  <nav class="rail-nav" aria-label="بخش‌ها">
+    <button class="rail-item is-active" data-view="today">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11.2 12 3.5l8.5 7.7"/><path d="M5.6 10.2V19a1.6 1.6 0 0 0 1.6 1.6h9.6A1.6 1.6 0 0 0 18.4 19v-8.8"/><path d="M9.6 20.6v-5.4a1.4 1.4 0 0 1 1.4-1.4h2a1.4 1.4 0 0 1 1.4 1.4v5.4"/></svg>
+      <span>امروز</span>
+    </button>
+    <button class="rail-item" data-view="week">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="5" width="17.6" height="16" rx="2.6"/><path d="M3.2 10h17.6"/><path d="M8 3v4M16 3v4"/><path d="M7.5 14h2M11 14h2M14.5 14h2M7.5 17.5h2M11 17.5h2"/></svg>
+      <span>هفته</span>
+    </button>
+    <button class="rail-item" data-view="meetings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2.8" y="6" width="12.4" height="12" rx="2.6"/><path d="M15.2 11l4.4-2.6a.7.7 0 0 1 1.1.6v6a.7.7 0 0 1-1.1.6l-4.4-2.6z"/></svg>
+      <span>جلسه‌ها</span>
+    </button>
+    <button class="rail-item" data-view="tasks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6.5h10M10 12h10M10 17.5h10"/><path d="M3.6 6.4l1.3 1.3 2.5-2.6M3.6 11.9l1.3 1.3 2.5-2.6M3.6 17.4l1.3 1.3 2.5-2.6"/></svg>
+      <span>کارها</span>
+      <span class="rail-badge" id="openCount" hidden></span>
+    </button>
+    <button class="rail-item" data-view="people">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9.2" cy="8.2" r="3.4"/><path d="M2.8 20a6.4 6.4 0 0 1 12.8 0"/><path d="M16.2 5.4a3.4 3.4 0 0 1 0 5.6"/><path d="M17.4 20a6.4 6.4 0 0 0-2.6-5.1"/></svg>
+      <span>آدم‌ها</span>
+    </button>
+    <button class="rail-item" data-view="report">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3.5v17h16"/><path d="M8 17V12.5M12.5 17V8.5M17 17v-6"/></svg>
+      <span>گزارش</span>
+    </button>
+    <button class="rail-item" data-view="kiosk">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17.4 5.5H4.6A1.6 1.6 0 0 0 3 7.1v10.3a2.1 2.1 0 0 0 2.1 2.1h12.9a2.1 2.1 0 0 0 2.1-2.1V9.2h-2.7"/><path d="M17.4 5.5v11.9a2.1 2.1 0 0 0 2.1 2.1"/><path d="M6.2 9.2h7.6M6.2 12.6h7.6M6.2 16h4.6"/></svg>
+      <span>کیوسک</span>
+    </button>
+  </nav>
+
+  <div class="rail-foot">
+    <button class="rail-item" data-view="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M19.6 14.6a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.3 1.03z"/></svg>
+      <span>تنظیمات</span>
+    </button>
+    <button id="themeToggle" class="rail-item" aria-label="تغییر پوسته" title="پوستهٔ روشن/تیره">
+      <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M4.2 12H2M22 12h-2.2M6.3 6.3 4.8 4.8M19.2 19.2l-1.5-1.5M17.7 6.3l1.5-1.5M4.8 19.2l1.5-1.5"/></svg>
+      <svg class="ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 13.4A8.8 8.8 0 1 1 10.6 3.2a6.9 6.9 0 0 0 10.2 10.2z"/></svg>
+      <span>پوسته</span>
+    </button>
+  </div>
+</aside>
+
+<div class="workspace">
+<main>
+
+<!-- ═══════════ امروز ═══════════ -->
+<section id="view-today" class="view is-active">
+  <div class="hero">
+    <div>
+      <h1 id="greeting">سلام</h1>
+      <p class="hero-date"><span id="jdate"></span><span class="hero-gdate" id="gdate"></span></p>
+    </div>
+    <div class="hero-side">
+      <p class="hero-summary" id="heroSummary"></p>
+      <div class="hero-focus" id="heroFocus" hidden></div>
+      <div id="teamClock" class="team-clock" hidden></div>
+    </div>
+  </div>
+
+  <!-- اخبار فناوری — اختیاری، پیش‌فرض خاموش -->
+  <section id="newsCard" class="news-card" hidden></section>
+
+  <div id="dayEndBanner" class="dayend-banner" hidden>
+    <div>
+      <strong>وقت جمع‌بندی روزه</strong>
+      <span id="dayEndHint"></span>
+    </div>
+    <button class="btn btn-ghost" id="dayEndOpen">روزم رو ببند</button>
+  </div>
+
+  <!-- خوش‌آمدِ کاربر جدید -->
+  <div id="onboarding" class="onboarding" hidden>
+    <h2>به منشی خوش اومدی 👋</h2>
+    <p>در سه قدم آماده‌ای — منشی دستیارِ جلسه‌ها و کارهاته:</p>
+    <div class="ob-steps">
+      <button class="ob-step" data-goto="settings"><span class="ob-n">۱</span><span>تقویم گوگل را وصل کن</span></button>
+      <button class="ob-step" data-goto="settings"><span class="ob-n">۲</span><span>یک اتصال هوش مصنوعی اضافه کن</span></button>
+      <button class="ob-step" id="obAddTask"><span class="ob-n">۳</span><span>اولین کارت را بنویس</span></button>
+    </div>
+  </div>
+
+  <!-- نوار «یک‌نگاه» — دیتای دستیارگونهٔ روز -->
+  <div id="kpiStrip" class="kpi-strip" hidden></div>
+
+  <!-- نوار جلسهٔ بعدی / جلسهٔ جاری — قبل از کامپوزر، چون فوریت دارد -->
+  <div id="nextMeeting" class="nextmtg" hidden></div>
+
+  <!-- از جلسه‌ها چه ماند (H‑۱ + H‑۲) -->
+  <section id="loose" class="loose" hidden></section>
+
+
+  <!-- کامپوزرِ یکپارچه: کار سریع + یادداشت روز + میان‌برها -->
+  <div class="composer">
+    <div class="composer-tabs" role="tablist">
+      <button class="composer-tab is-active" data-mode="task" role="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 12.3l2.6 2.6 8.4-9"/><path d="M20.4 12v7a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2V5.4a2 2 0 0 1 2-2h9.6"/></svg>
+        کار سریع
+      </button>
+      <button class="composer-tab" data-mode="note" role="tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 20H21"/><path d="M16.4 3.6a2.1 2.1 0 0 1 3 3L8.5 17.5l-4 1 1-4z"/></svg>
+        یادداشت امروز
+      </button>
+      <span class="scratch-status composer-status" id="scratchStatus"></span>
+      <!-- میان‌برها در همان نوار — یک ردیفِ کمتر -->
+      <div id="quickActions" class="quick-actions"></div>
+    </div>
+
+    <form class="quickadd composer-pane" id="quickAdd" data-pane="task" autocomplete="off">
+      <svg class="quickadd-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.5v13M5.5 12h13"/></svg>
+      <input id="quickInput" type="text"
+        placeholder="چی باید انجام بشه؟ مثلاً: فاکتور رو بفرست تا چهارشنبه"
+        aria-label="افزودن کار جدید" />
+      <span id="dueChip" class="due-preview" hidden></span>
+      <span id="recurChip" class="due-preview recur-chip" hidden></span>
+      <label class="delegate-toggle" title="این کار را به کسی سپرده‌ام و منتظر انجامش هستم">
+        <input type="checkbox" id="delegateCheck">
+        <span>سپرده به…</span>
+      </label>
+      <input id="delegateName" type="text" class="delegate-name" placeholder="نام" hidden aria-label="نام مسئول">
+      <button type="submit" class="btn btn-primary">ثبت</button>
+    </form>
+
+    <div class="composer-pane composer-note" data-pane="note" hidden>
+      <textarea id="scratchInput" class="scratch-input" rows="3"
+        placeholder="هر چیزی که به ذهنت رسید بنویس… بعداً می‌تونی خط‌به‌خط تبدیلش کنی به کار."
+        aria-label="یادداشت امروز"></textarea>
+      <div class="scratch-foot">
+        <span class="scratch-hint">خودکار ذخیره می‌شود · فقط امروز</span>
+        <button class="btn btn-ghost btn-sm" id="scratchToTask" title="خطِ جاری را به یک کار تبدیل کن">این خط ← کار</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="today-grid today-grid-2">
+    <section class="card col-todo">
+      <div class="todo-head">
+        <h2 class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+          تمرکز امروز
+        </h2>
+        <div class="todo-progress" id="focusProgress" hidden>
+          <div class="todo-ring" id="focusRing"><span id="focusRingTxt"></span></div>
+          <span class="todo-progress-label" id="focusProgressLabel"></span>
+        </div>
+      </div>
+      <div id="focusList" class="todo-list"></div>
+
+      <!-- منتظرِ دیگران (پیگیری‌ها) -->
+      <div class="focus-waiting" id="focusWaiting" hidden>
+        <h3 class="focus-sub-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H8l-4 4z"/><path d="M9 9h6"/></svg>
+          منتظرِ دیگران
+        </h3>
+        <div id="followupList"></div>
+      </div>
+
+      <button class="focus-all-link" data-goto="tasks">مدیریت همهٔ کارها ←</button>
+    </section>
+
+    <section class="card col-timeline">
+      <h2 class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4m8-4v4M3 9.5h18"/></svg>
+        خط‌زمانی امروز
+        <button id="calRefresh" class="icon-btn icon-btn-sm" title="به‌روزرسانی تقویم" aria-label="به‌روزرسانی تقویم" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>
+        </button>
+      </h2>
+      <div id="workloadChip"></div>
+      <div id="meetingList" class="timeline"></div>
+    </section>
+  </div>
+</section>
+
+<!-- ═══════════ هفته ═══════════ -->
+<section id="view-week" class="view">
+  <div class="report-head">
+    <div>
+      <h1>نمای هفته</h1>
+      <p class="report-range" id="weekRange"></p>
+    </div>
+    <div class="week-nav">
+      <button class="icon-btn" id="weekPrev" title="هفتهٔ قبل" aria-label="هفتهٔ قبل">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+      <button class="btn btn-ghost btn-sm" id="weekToday">این هفته</button>
+      <button class="icon-btn" id="weekNext" title="هفتهٔ بعد" aria-label="هفتهٔ بعد">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+  </div>
+  <!-- کارهای بی‌تاریخ — بکششان روی یک روز تا ددلاین بگیرند -->
+  <div id="weekTray" class="week-tray" hidden>
+    <span class="week-tray-label">کارهای بی‌تاریخ — بکش روی یک روز</span>
+    <div id="weekTrayList" class="week-tray-list"></div>
+  </div>
+  <div id="weekGrid" class="week-grid"></div>
+</section>
+
+<!-- ═══════════ جلسه‌ها (منشی) ═══════════ -->
+<section id="view-meetings" class="view">
+  <div id="meetingsArchive">
+    <div class="report-head">
+      <h1>جلسه‌ها</h1>
+      <div class="seg" style="padding:0;border:0;background:none">
+        <button class="btn btn-primary" id="newManualBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          جلسهٔ دستی
+        </button>
+        <button class="btn btn-ghost" id="importMonshiBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+          وارد کردن از منشی
+        </button>
+        <input type="file" id="importMonshiFile" accept="application/json,.json" hidden>
+      </div>
+    </div>
+    <p class="report-range">صورت‌جلسهٔ هوشمند از Google Meet. زیرنویس در جلسه ثبت می‌شود؛ اینجا سند کامل ساخته می‌شود و اقدام‌ها به «کارها» می‌روند. اگر اکستنشن منشی را دارید، از پشتیبان آن جلسه‌های قبلی‌تان را وارد کنید.</p>
+    <div class="seg" role="tablist" id="meetingsTabs">
+      <button class="seg-btn is-active" data-mtab="list">جلسه‌ها</button>
+      <button class="seg-btn" data-mtab="register">تصمیم‌ها و ریسک‌ها</button>
+      <button class="seg-btn" data-mtab="ask">جست‌وجو و پرسش</button>
+    </div>
+    <div class="meeting-search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.8" cy="10.8" r="6.8"/><path d="M20.5 20.5l-4.9-4.9"/></svg>
+      <input id="meetingSearch" type="search" placeholder="جست‌وجو در عنوان و متن جلسه‌ها…" aria-label="جست‌وجوی جلسه‌ها">
+    </div>
+    <div id="meetingList2"></div>
+    <div id="meetingRegister" hidden></div>
+    <div id="meetingAsk" hidden></div>
+  </div>
+  <div id="meetingDetail" class="meeting-detail" hidden></div>
+</section>
+
+<!-- ═══════════ کارها ═══════════ -->
+<section id="view-tasks" class="view">
+  <div class="report-head">
+    <div>
+      <h1>کارها</h1>
+      <p class="report-range" id="tasksStats"></p>
+    </div>
+    <div class="seg" role="tablist" id="tasksViewToggle">
+      <button class="seg-btn is-active" data-tview="list">فهرست</button>
+      <button class="seg-btn" data-tview="board">برد</button>
+    </div>
+  </div>
+
+  <form class="quickadd tasks-quickadd" id="tasksQuickAdd" autocomplete="off">
+    <svg class="quickadd-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.5v13M5.5 12h13"/></svg>
+    <input id="tasksQuickInput" type="text" placeholder="افزودن کار… مثلاً: فاکتور رو بفرست تا شنبه #مالی" aria-label="افزودن کار جدید">
+    <span id="tqDueChip" class="due-preview" hidden></span>
+    <span id="tqRecurChip" class="due-preview recur-chip" hidden></span>
+    <button type="button" class="qa-link-btn" id="tqPersonBtn" title="وصل به یک نفر" aria-label="وصل به یک نفر">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>
+      <span id="tqPersonLabel">فرد</span>
+    </button>
+    <button type="button" class="qa-link-btn" id="tqMeetingBtn" title="وصل به یک جلسه" aria-label="وصل به یک جلسه">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2.8" y="6" width="12.4" height="12" rx="2.6"/><path d="M15.2 11l4.4-2.6a.7.7 0 0 1 1.1.6v6a.7.7 0 0 1-1.1.6l-4.4-2.6z"/></svg>
+      <span id="tqMeetingLabel">جلسه</span>
+    </button>
+    <button type="submit" class="btn btn-primary">ثبت</button>
+  </form>
+
+  <div id="taskListWrap">
+    <div class="todo-filters" id="todoFilters">
+      <button class="todo-filter is-active" data-filter="active">در جریان</button>
+      <button class="todo-filter" data-filter="all">همه</button>
+      <button class="todo-filter" data-filter="theirs">سپرده‌شده</button>
+      <button class="todo-filter" data-filter="done">انجام‌شده</button>
+      <!-- فقط وقتی کارِ پوسیده‌ای هست دیده می‌شود -->
+      <button class="todo-filter todo-filter-review" data-filter="stale" id="staleFilter" hidden>مرور<span class="todo-filter-n" id="staleCount"></span></button>
+      <button class="todo-tools-toggle" id="todoToolsBtn" title="جستجو و مرتب‌سازی" aria-label="جستجو و مرتب‌سازی" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.8" cy="10.8" r="6.8"/><path d="M20.5 20.5l-4.9-4.9"/></svg>
+      </button>
+      <button class="todo-filter todo-bulk-toggle" id="bulkToggle" type="button">انتخاب چندتایی</button>
+    </div>
+    <div id="bulkBar" class="bulk-bar" hidden></div>
+    <div class="todo-toolbar" id="todoToolbar" hidden>
+      <div class="todo-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.8" cy="10.8" r="6.8"/><path d="M20.5 20.5l-4.9-4.9"/></svg>
+        <input id="todoSearch" type="text" placeholder="جستجو در کارها…" aria-label="جستجو در کارها">
+        <button id="todoSearchClear" class="todo-search-clear" aria-label="پاک کردن جستجو" hidden>×</button>
+      </div>
+      <label class="todo-sort">
+        <span>گروه‌بندی</span>
+        <select id="todoGroup" aria-label="گروه‌بندی کارها">
+          <option value="date">تاریخ</option>
+          <option value="tag">برچسب</option>
+          <option value="meeting">جلسه</option>
+          <option value="person">فرد</option>
+        </select>
+      </label>
+      <label class="todo-sort">
+        <span>مرتب‌سازی</span>
+        <select id="todoSort" aria-label="مرتب‌سازی کارها">
+          <option value="smart">هوشمند</option>
+          <option value="due">ددلاین</option>
+          <option value="created">جدیدترین</option>
+          <option value="alpha">الفبا</option>
+          <option value="manual">دستی (کشیدن)</option>
+        </select>
+      </label>
+    </div>
+    <div class="todo-tags" id="todoTags" hidden></div>
+    <div id="todoList" class="todo-list"></div>
+  </div>
+  <div id="taskBoard" class="kanban" hidden></div>
+</section>
+
+<!-- ═══════════ آدم‌ها ═══════════ -->
+<section id="view-people" class="view">
+  <div class="report-head">
+    <h1>پروندهٔ آدم‌ها</h1>
+    <button class="btn btn-ghost btn-sm" id="addPersonBtn">+ افزودن فرد</button>
+  </div>
+  <p class="report-range">هر کسی که کاری به او سپرده‌ای یا با او جلسه داری — خودکار ساخته می‌شود؛ می‌توانی خودت هم اضافه کنی.</p>
+  <form class="person-add" id="personAddForm" hidden autocomplete="off">
+    <input id="paName" placeholder="نام" aria-label="نام فرد">
+    <input id="paEmail" type="email" dir="ltr" placeholder="ایمیل (اختیاری)" aria-label="ایمیل">
+    <input id="paGroup" placeholder="گروه/تیم (اختیاری)" aria-label="گروه">
+    <button type="submit" class="btn btn-primary btn-sm">افزودن</button>
+  </form>
+  <div id="peopleGrid" class="people-grid"></div>
+</section>
+
+<!-- ═══════════ گزارش ═══════════ -->
+<section id="view-report" class="view">
+  <div class="report-head">
+    <h1>گزارش هفتگی</h1>
+    <label class="range-sel">
+      <span>بازه</span>
+      <select id="weekRangeSel" aria-label="بازهٔ گزارش">
+        <option value="0">این هفته</option>
+        <option value="-1">هفتهٔ قبل</option>
+        <option value="-2">۲ هفته پیش</option>
+        <option value="-3">۳ هفته پیش</option>
+      </select>
+    </label>
+  </div>
+  <p class="report-range" id="reportRange"></p>
+  <div class="stat-row" id="statRow"></div>
+  <div class="report-grid">
+    <section class="card">
+      <h2 class="card-title">انجام‌شده در روزهای هفته</h2>
+      <div class="chart" id="weekChart" role="img"></div>
+    </section>
+    <section class="card">
+      <h2 class="card-title">خلاصهٔ متنی</h2>
+      <pre class="report-text" id="reportText"></pre>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="copyReport">کپی گزارش</button>
+        <button class="btn btn-primary" id="managerReport">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"/></svg>
+          گزارش به مدیر
+        </button>
+      </div>
+      <div id="managerOut" class="manager-out" hidden>
+        <pre id="managerText" class="report-text"></pre>
+        <button class="btn btn-ghost" id="copyManager">کپی متن مدیر</button>
+      </div>
+    </section>
+  </div>
+</section>
+
+<!-- ═══════════ کیوسک ═══════════ -->
+<!-- صفحهٔ مکث. هرچه اینجاست آفلاین محاسبه می‌شود، جز کارتِ اخبار که اختیاری است. -->
+<section id="view-kiosk" class="view">
+  <div class="report-head">
+    <div>
+      <h1>کیوسک</h1>
+      <p class="report-range" id="kioskSub">یک نگاه به بیرونِ کار</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" id="kioskPrefsBtn">چه چیزهایی دیده شود</button>
+  </div>
+  <div class="kiosk-grid" id="kioskGrid"></div>
+  <p class="kiosk-foot">همهٔ این‌ها روی همین دستگاه حساب می‌شود — جز اخبار که از فید عمومیِ سایت‌ها خوانده می‌شود و اختیاری است.</p>
+</section>
+
+<!-- ═══════════ تنظیمات ═══════════ -->
+<section id="view-settings" class="view">
+  <h1>تنظیمات</h1>
+  <div class="settings-grid">
+    <details class="set-acc" open>
+      <summary class="set-summary">تقویم گوگل (iCal)</summary>
+      <p class="hint">در گوگل‌کلندر: Settings ← تقویم موردنظر ← «Secret address in iCal format» را کپی کنید.</p>
+      <label class="field"><span>آدرس مخفی iCal</span>
+        <input type="password" id="setIcs" dir="ltr" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
+      </label>
+      <p class="hint hint-warn">⚠ این آدرس مثل رمز عبور است — هر کسی داشته باشدش تقویم شما را می‌بیند. وردست آن را فقط روی همین دستگاه نگه می‌دارد و در هیچ لاگ یا خروجی‌ای نمی‌آورد.</p>
+      <div class="btn-row"><button class="btn btn-primary" id="saveIcs">ذخیره و اتصال</button><span class="field-status" id="icsStatus"></span></div>
+    </details>
+
+    <details class="set-acc ai-card" open>
+      <summary class="set-summary">هوش مصنوعی — اتصال‌ها</summary>
+      <p class="hint">می‌توانید چند سرویس اضافه کنید (برای پشتیبان یا انتخاب مدل ارزان/قوی). اتصالِ «فعال» برای همهٔ ماژول‌ها استفاده می‌شود. کلید فقط روی همین دستگاه می‌ماند و هرگز در خروجی بدون‌رمز نمی‌آید.</p>
+      <div id="aiList" class="ai-list"></div>
+      <div class="ai-editor">
+        <h3 id="aiEditorTitle">افزودن اتصال جدید</h3>
+        <input type="hidden" id="aiEditId">
+        <div class="field-row">
+          <label class="field"><span>سرویس</span><select id="aiEdProvider"></select></label>
+          <label class="field"><span>نام دلخواه</span><input type="text" id="aiEdName" placeholder="مثلاً OpenAI کاری"></label>
+        </div>
+        <label class="field"><span>Base URL</span><input type="text" id="aiEdBaseUrl" dir="ltr" placeholder="https://api.openai.com"></label>
+        <div class="field-row">
+          <label class="field"><span>کلید API</span><input type="password" id="aiEdKey" dir="ltr" placeholder="sk-…"></label>
+          <label class="field"><span>مدل (سند نهایی)</span><input type="text" id="aiEdModel" dir="ltr" placeholder="gpt-4o-mini"></label>
+        </div>
+        <label class="field"><span>مدل استخراج (اختیاری — ارزان‌تر برای جلسات طولانی)</span><input type="text" id="aiEdExtractModel" dir="ltr" placeholder="خالی = همان مدل بالا"></label>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="aiSave">ذخیره اتصال</button>
+          <button class="btn btn-ghost" id="aiTest">تست</button>
+          <button class="btn btn-ghost" id="aiCancel" hidden>انصراف</button>
+          <span class="field-status" id="aiStatus"></span>
+        </div>
+      </div>
+    </details>
+
+    <details class="set-acc">
+      <summary class="set-summary">قالب‌های صورت‌جلسه</summary>
+      <p class="hint">قالب‌های آماده همیشه هستند. می‌توانید قالب سفارشی خودتان را هم بسازید تا موقع ساخت صورت‌جلسه انتخابش کنید.</p>
+      <div id="tplList" class="ai-list"></div>
+      <div class="ai-editor">
+        <label class="field"><span>نام قالب</span><input type="text" id="tplName" maxlength="60" placeholder="مثلاً جلسهٔ کمیتهٔ محصول"></label>
+        <label class="field"><span>دستور قالب (روی چه چیزی تمرکز کند)</span><textarea id="tplInstructions" rows="3" maxlength="4000" placeholder="مثلاً روی تصمیم‌های محصول، ریسک انتشار و وابستگی‌های فنی تمرکز کن."></textarea></label>
+        <div class="btn-row"><button class="btn btn-primary" id="tplSave">ذخیره قالب</button><span class="field-status" id="tplStatus"></span></div>
+      </div>
+    </details>
+
+    <details class="set-acc">
+      <summary class="set-summary">پل منشی</summary>
+      <p class="hint">شناسهٔ اکستنشن منشی را وارد کنید تا اقدام‌های جلسه‌ها خودکار وارد وردست شوند. تا وقتی خالی است، هیچ اکستنشنی به وردست دسترسی ندارد.</p>
+      <label class="field"><span>شناسهٔ اکستنشن منشی</span><input type="text" id="setMonshi" dir="ltr" placeholder="مثل: abcdefghijklmnop…"></label>
+      <div class="btn-row"><button class="btn btn-primary" id="saveMonshi">ذخیره</button><span class="field-status" id="monshiStatus"></span></div>
+    </details>
+
+    <details class="set-acc">
+      <summary class="set-summary">پشتیبان‌گیری</summary>
+      <p class="hint">همهٔ داده‌ها فقط روی این دستگاه است. برای جابه‌جایی به دستگاه دیگر یا محض احتیاط، یک فایل پشتیبان بگیرید.</p>
+      <label class="check-inline"><input type="checkbox" id="backupSecrets"><span>شامل اطلاعات حساس (کلید API و آدرس تقویم)</span></label>
+      <p class="hint hint-warn" id="backupWarn" hidden>⚠ فایل شامل کلید API و آدرس تقویم می‌شود؛ جای امن نگه‌ش دارید و برای کسی نفرستید.</p>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="exportBtn">دریافت فایل پشتیبان</button>
+        <button class="btn btn-ghost" id="importBtn">بازگردانی از فایل</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+        <span class="field-status" id="backupStatus"></span>
+      </div>
+    </details>
+
+    <details class="set-acc">
+      <summary class="set-summary">ترجیحات</summary>
+      <label class="field"><span>نام شما (برای سلام صبحگاهی)</span><input type="text" id="setName" placeholder="مثلاً نگار"></label>
+      <label class="field"><span>ایمیل شما</span><input type="email" id="setEmail" placeholder="مثلاً name@example.com" autocomplete="email">
+        <small class="field-hint">تا در فهرست شرکت‌کننده‌ها، «You»ی که Meet می‌نویسد به خودت وصل شود و دوباره به‌عنوان یک نفر جدا نیاید.</small></label>
+      <label class="field"><span>ساعت پایان روز کاری</span>
+        <select id="setDayEnd">
+          <option value="15">۱۵</option><option value="16">۱۶</option><option value="17" selected>۱۷</option>
+          <option value="18">۱۸</option><option value="19">۱۹</option><option value="20">۲۰</option>
+        </select>
+      </label>
+      <div class="btn-row"><button class="btn btn-primary" id="savePrefs">ذخیره</button><span class="field-status" id="prefsStatus"></span></div>
+    </details>
+
+    <details class="set-acc">
+      <summary class="set-summary">سربرگ صفحهٔ امروز</summary>
+      <div class="field">
+        <span>ساعتِ کدام شهرها دیده شود</span>
+        <div class="zone-picker" id="zonePicker"></div>
+        <small class="field-hint">هر تعداد شهر که خواستی انتخاب کن — همه کنار هم در سربرگ می‌آیند. ساعت خودت همیشه اول هست.</small>
+      </div>
+      <label class="field-check">
+        <input type="checkbox" id="setNewsOn">
+        <span>کارت «اخبار فناوری» در صفحهٔ امروز</span>
+      </label>
+      <div class="field" id="newsSourceField" hidden>
+        <span>منابع خبر</span>
+        <div class="zone-picker" id="newsPicker"></div>
+        <small class="field-hint">⚠️ این تنها بخشی از منشی است که به سایتِ بیرونی وصل می‌شود — عنوان خبرها از فید عمومی همان سایت‌ها خوانده می‌شود. هیچ دادهٔ تو ارسال نمی‌شود.</small>
+        <div class="btn-row" style="margin-top:8px">
+          <button type="button" class="btn btn-ghost btn-sm" id="testNews">بررسی اتصال</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="grantNews">دادن دسترسی به سایت‌ها</button>
+        </div>
+        <div id="newsDiag" class="news-diag" hidden></div>
+      </div>
+      <div class="btn-row"><button class="btn btn-primary" id="saveHero">ذخیره</button><span class="field-status" id="heroStatus"></span></div>
+    </details>
+
+    <details class="set-acc">
+      <summary class="set-summary">میان‌برهای صفحه‌کلید</summary>
+      <ul class="shortcut-list">
+        <li><kbd>⌘</kbd><kbd>K</kbd> <span>جست‌وجوی سراسری و کارِ سریع</span></li>
+        <li><kbd>/</kbd> <span>همان جست‌وجوی سراسری</span></li>
+        <li><kbd>N</kbd> <span>نوشتن کار تازه</span></li>
+        <li><kbd>۱</kbd>…<kbd>۶</kbd> <span>رفتن به امروز، هفته، جلسه‌ها، کارها، آدم‌ها، گزارش</span></li>
+        <li><kbd>Esc</kbd> <span>بستن پنجره یا منوی باز</span></li>
+      </ul>
+      <p class="field-hint">میان‌برهای تک‌حرفی وقتی داخل یک کادر متن می‌نویسی کار نمی‌کنند.</p>
+    </details>
+  </div>
+  <p class="settings-foot">منشی هیچ سروری ندارد — همهٔ داده‌ها در حافظهٔ محلی مرورگر شماست. نکته: در نوار آدرس بنویسید «منشی» + فاصله تا از همان‌جا کار ثبت کنید.</p>
+  <p class="settings-version">نسخهٔ <span id="appVersion">—</span></p>
+</section>
+
+</main>
+</div><!-- .workspace -->
+
+<!-- مودال پیش‌نویس یادآوری -->
+<div class="modal-wrap" id="followupModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="fuTitle">
+    <h2 id="fuTitle">پیش‌نویس یادآوری</h2>
+    <textarea id="fuText" rows="6"></textarea>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="fuCopy">کپی پیام</button>
+      <button class="btn btn-ghost" id="fuAi">بازنویسی با AI</button>
+      <button class="btn btn-ghost modal-close">بستن</button>
+    </div>
+  </div>
+</div>
+
+<!-- مودال جمع‌بندی روز -->
+<div class="modal-wrap" id="dayEndModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="deTitle">
+    <h2 id="deTitle">جمع‌بندی روز</h2>
+    <div id="dayEndBody"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="deMoveAll">مانده‌ها رو ببر فردا</button>
+      <button class="btn btn-ghost modal-close">بستن</button>
+    </div>
+  </div>
+</div>
+
+<!-- مودال بریف جلسه -->
+<!-- جلسهٔ دستی: ساخت جلسهٔ حضوری یا ویرایش مشخصاتِ جلسهٔ موجود -->
+<div class="modal-wrap" id="manualModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="manualTitle">
+    <h2 id="manualTitle">جلسهٔ دستی</h2>
+    <p class="hint" id="manualHint">برای جلسه‌های حضوری یا تلفنی که در Meet ضبط نشده‌اند.</p>
+    <div class="manual-grid">
+      <label class="field"><span>عنوان جلسه</span>
+        <input id="manualName" type="text" placeholder="مثلاً: جلسهٔ حضوری با تیم فروش" maxlength="200"></label>
+      <label class="field"><span>تاریخ</span>
+        <input id="manualDate" type="date"></label>
+      <label class="field"><span>ساعت شروع</span>
+        <input id="manualTime" type="time"></label>
+      <label class="field"><span>مدت (دقیقه)</span>
+        <input id="manualDur" type="number" min="1" max="1440" step="5" value="60"></label>
+    </div>
+    <label class="field"><span>شرکت‌کننده‌ها</span>
+      <input id="manualPeople" type="text" placeholder="نام یا ایمیل، با ویرگول جدا کن — مثلاً: نگار احمدی، ali@acme.com">
+      <small class="field-hint">هرکدام ایمیل داشته باشد به پروندهٔ همان فرد وصل می‌شود.</small></label>
+    <label class="field" id="manualBodyField"><span>یادداشت یا متن جلسه</span>
+      <textarea id="manualBody" rows="9" placeholder="هرچه در جلسه گذشت را اینجا بنویس یا از جای دیگر بچسبان. بعد می‌توانی با هوش مصنوعی از رویش صورت‌جلسه بسازی."></textarea>
+      <small class="field-hint">می‌توانی خالی بگذاری و بعداً پر کنی.</small></label>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="manualSave">ذخیرهٔ جلسه</button>
+      <button class="btn btn-ghost modal-close">انصراف</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="briefModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="briefTitle">
+    <h2 id="briefTitle">بریف جلسه</h2>
+    <div id="briefBody"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="briefAgenda">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"/></svg>
+        پیشنهاد دستور جلسه با AI
+      </button>
+      <button class="btn btn-ghost modal-close">بستن</button>
+    </div>
+    <pre id="briefAgendaOut" class="report-text" hidden></pre>
+  </div>
+</div>
+
+<!-- جستجوی سراسری / کامند پالت -->
+<div class="modal-wrap cmd-wrap" id="cmdPalette" hidden>
+  <div class="cmd" role="dialog" aria-modal="true" aria-label="جستجوی سراسری">
+    <div class="cmd-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.8" cy="10.8" r="6.8"/><path d="M20.5 20.5l-4.9-4.9"/></svg>
+      <input id="cmdInput" type="text" placeholder="جستجو در کارها، جلسه‌ها، آدم‌ها… یا رفتن به یک بخش" aria-label="جستجوی سراسری" autocomplete="off">
+      <kbd class="cmd-esc">Esc</kbd>
+    </div>
+    <div id="cmdResults" class="cmd-results" role="listbox"></div>
+  </div>
+</div>
+
+<div id="toastWrap" class="toast-wrap" aria-live="polite"></div>
+</div><!-- .app -->
+
+<script src="core/jalali.js"></script>
+<script src="core/date-parser.js"></script>
+<script src="core/ai-client.js"></script>
+<script src="core/transcript-cleaner.js"></script>
+<script src="core/search.js"></script>
+<script src="core/kiosk.js"></script>
+<script src="core/market.js"></script>
+<script src="core/mom-core.js"></script>
+<script src="core/store.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

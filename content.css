@@ -1,0 +1,13 @@
+#meetnote-status{position:fixed;inset:16px 16px auto auto;z-index:2147483647;direction:rtl;font-family:Vazirmatn,'Segoe UI',Tahoma,sans-serif}
+#manshi-capture-toggle{display:inline-flex;align-items:center;gap:8px;cursor:pointer;border:0;border-radius:999px;padding:10px 16px;font-size:13px;font-weight:700;color:#fff;background:#2fbf71;box-shadow:0 6px 20px -6px rgba(0,0,0,.5),0 0 0 1px rgba(0,0,0,.15);transition:filter .15s,transform .15s;font-family:inherit}
+#manshi-capture-toggle:hover{filter:brightness(1.08);transform:translateY(-1px)}
+#manshi-capture-toggle:active{transform:scale(.97)}
+#manshi-capture-toggle i{display:inline-block;width:9px;height:9px;border-radius:999px;background:#fff;opacity:.9}
+#meetnote-status.on #manshi-capture-toggle{background:#ef4444}
+#meetnote-status.on #manshi-capture-toggle i{animation:manshiPulse 1.4s infinite}
+@keyframes manshiPulse{0%,100%{opacity:1}50%{opacity:.3}}
+@media(prefers-reduced-motion:reduce){#manshi-capture-toggle{transition:none}#meetnote-status.on #manshi-capture-toggle i{animation:none}}
+#meetnote-status.warn #manshi-capture-toggle{background:#d97706}
+#meetnote-status.err #manshi-capture-toggle{background:#b91c1c}
+#meetnote-status.err #manshi-capture-toggle i{animation:none;background:#fff}
+#manshi-capture-hint{margin-top:6px;max-width:280px;background:#111827;color:#f3f4f6;font-size:12px;line-height:1.6;padding:8px 12px;border-radius:10px;box-shadow:0 6px 20px -6px rgba(0,0,0,.5);text-align:right}

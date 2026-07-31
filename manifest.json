@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "منشی — دستیار بهره‌وری",
+  "version": "0.9.4",
+  "description": "پلتفرم بهره‌وری فارسی: صورت‌جلسهٔ هوشمند، مدیریت کارها، تقویم شمسی و گزارش — همه روی دستگاه خودتان.",
+  "permissions": ["storage", "alarms", "notifications"],
+  "optional_permissions": ["tabs"],
+  "optional_host_permissions": [
+    "https://calendar.google.com/*",
+    "https://*/*"
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["core/transcript-cleaner.js", "content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_title": "منشی — باز کردن پلتفرم",
+    "default_icon": { "16": "icon16.png", "32": "icon32.png" }
+  },
+  "omnibox": { "keyword": "منشی" }
+}
