@@ -1550,6 +1550,138 @@ t('peopleFiles گروه‌بندی درست', () => {
       const cur = K.SAYINGS[0].lines[0];
       for (let i = 0; i < 40; i++) assert.notStrictEqual(K.randomSaying('all', cur).lines[0], cur);
     });
+    // ── نقل‌قول‌های تازه از اینترنت ──
+    const ZEN = JSON.stringify([
+      { q: "Difficult and meaningful will always bring more satisfaction than easy and meaningless.", a: "Maxime Lagace" },
+      { q: "The best way out is always through.", a: "Robert Frost" },
+      { q: "short", a: "X" },                                   // خیلی کوتاه
+      { q: "A".repeat(400), a: "Someone" },                     // خیلی بلند
+      { q: "A quote with no author at all here", a: "" },       // بی‌گوینده
+      { q: "Another fine and quite reasonable saying.", a: "zenquotes.io" }, // ردیف تبلیغاتی
+      { q: "The best way out is always through.", a: "Robert Frost" }  // تکراری
+    ]);
+    t('نقل‌قول وب: فقط ردیف‌های سالم پذیرفته می‌شوند', () => {
+      const out = K.parseQuotes(ZEN);
+      assert.strictEqual(out.length, 2, JSON.stringify(out.map(x => x.poet)));
+      assert.deepStrictEqual(out.map(x => x.poet), ['Maxime Lagace', 'Robert Frost']);
+      assert.ok(out.every(x => x.kind === 'quote' && x.src === 'web' && x.lines.length === 1));
+    });
+    t('نقل‌قول وب: پاسخِ خراب صفحه را نمی‌شکند', () => {
+      for (const bad of ['', 'نه JSON', '{}', '[]', 'null', JSON.stringify({ quotes: null })])
+        assert.deepStrictEqual(K.parseQuotes(bad), [], String(bad).slice(0, 12));
+    });
+    t('نقل‌قول وب: شکلِ dummyjson هم خوانده می‌شود', () => {
+      const out = K.parseQuotes(JSON.stringify({ quotes: [{ quote: 'Your heart is the size of an ocean.', author: 'Rumi' }] }));
+      assert.strictEqual(out.length, 1);
+      assert.strictEqual(out[0].poet, 'Rumi');
+    });
+    t('نقل‌قول وب: به مجموعهٔ محلی اضافه می‌شود، جایش را نمی‌گیرد', () => {
+      const web = K.parseQuotes(ZEN);
+      const all = K.allSayings(web);
+      assert.strictEqual(all.length, K.SAYINGS.length + 2);
+      assert.ok(all.some(s => s.poet === 'حافظ'), 'شعر فارسی باید بماند');
+      assert.ok(all.some(s => s.poet === 'Robert Frost'));
+    });
+    t('نقل‌قول وب: تکراری با مجموعهٔ محلی اضافه نمی‌شود', () => {
+      const dup = [{ kind: 'quote', poet: 'X', lines: [K.SAYINGS.find(s => s.kind === 'quote').lines[0]], src: 'web' }];
+      assert.strictEqual(K.allSayings(dup).length, K.SAYINGS.length);
+    });
+    t('نقل‌قول وب: بدونِ اینترنت همه‌چیز مثل قبل کار می‌کند', () => {
+      assert.strictEqual(K.allSayings([]).length, K.SAYINGS.length);
+      assert.strictEqual(K.allSayings(null).length, K.SAYINGS.length);
+      assert.ok(K.sayingOfDay(NOW, 'all', []) !== null);
+    });
+    t('نقل‌قول وب: سقفِ نگه‌داری رعایت می‌شود', () => {
+      const many = Array.from({ length: K.MAX_FETCHED + 80 }, (_, i) => ({ kind: 'quote', poet: 'p' + i, lines: ['q' + i] }));
+      const kept = K.trimQuotes(many);
+      assert.strictEqual(kept.length, K.MAX_FETCHED);
+      assert.strictEqual(kept[kept.length - 1].lines[0], 'q' + (many.length - 1), 'تازه‌ترین‌ها باید بمانند');
+    });
+    t('نقل‌قول وب: صافیِ «نقل‌قول» شاملِ تازه‌ها هم می‌شود', () => {
+      const web = K.parseQuotes(ZEN);
+      const q = K.filterSayings('quote', web);
+      assert.ok(q.some(s => s.poet === 'Robert Frost'));
+      assert.ok(q.every(s => s.kind === 'quote'));
+      assert.ok(!K.filterSayings('poem', web).some(s => s.src === 'web'), 'شعر نباید آلوده شود');
+    });
+    t('نقل‌قول وب: آدرسِ فید https است', () => assert.ok(/^https:\/\//.test(K.QUOTE_FEED)));
+
+    // ── تایمر تمرکز ──
+    const T0 = new Date(2026, 6, 28, 10, 0, 0);
+    const at = (min, sec = 0) => new Date(T0.getTime() + min * 60000 + sec * 1000);
+    t('تمرکز: بدون جلسه، بی‌کار است', () => {
+      assert.strictEqual(K.focusState(null, T0).phase, 'idle');
+      assert.strictEqual(K.focusState({}, T0).phase, 'idle');
+    });
+    const sess = K.startSession('t1', 25, T0);
+    t('تمرکز: شروع ۲۵ دقیقه‌ای درست ساخته می‌شود', () => {
+      assert.strictEqual(sess.minutes, 25);
+      assert.strictEqual(sess.mode, 'work');
+      assert.strictEqual(sess.taskId, 't1');
+    });
+    t('تمرکز: شمارش از ساعتِ دیوار است، نه تیکِ داخلی', () => {
+      assert.strictEqual(K.focusState(sess, T0).leftSec, 1500);
+      assert.strictEqual(K.focusState(sess, at(10)).leftSec, 900);
+      // حتی اگر تب دقایقی خواب بوده باشد، عدد درست درمی‌آید
+      assert.strictEqual(K.focusState(sess, at(24, 30)).leftSec, 30);
+    });
+    t('تمرکز: درصد پیشرفت درست است', () => {
+      assert.strictEqual(K.focusState(sess, T0).pct, 0);
+      assert.strictEqual(K.focusState(sess, at(12, 30)).pct, 50);
+      assert.strictEqual(K.focusState(sess, at(25)).pct, 100);
+    });
+    t('تمرکز: پس از پایان، تمام‌شده است و منفی نمی‌رود', () => {
+      const st = K.focusState(sess, at(40));
+      assert.strictEqual(st.phase, 'done');
+      assert.strictEqual(st.leftSec, 0);
+      assert.ok(st.pct <= 100);
+    });
+    t('تمرکز: قالبِ ساعت درست است', () => {
+      assert.strictEqual(K.clock(1500), '25:00');
+      assert.strictEqual(K.clock(65), '01:05');
+      assert.strictEqual(K.clock(0), '00:00');
+      assert.strictEqual(K.clock(-5), '00:00');
+    });
+    t('تمرکز: بعد از کار، استراحتِ کوتاه', () => {
+      const nx = K.nextSession(sess, at(25));
+      assert.strictEqual(nx.mode, 'break');
+      assert.strictEqual(nx.minutes, K.FOCUS.shortBreak);
+      assert.strictEqual(nx.taskId, 't1', 'کار باید حفظ شود');
+    });
+    t('تمرکز: هر ۴ دور، استراحتِ بلند', () => {
+      const r4 = { ...sess, round: 4 };
+      assert.strictEqual(K.nextSession(r4, at(25)).minutes, K.FOCUS.longBreak);
+      const r3 = { ...sess, round: 3 };
+      assert.strictEqual(K.nextSession(r3, at(25)).minutes, K.FOCUS.shortBreak);
+    });
+    t('تمرکز: بعد از استراحت، دورِ بعدیِ کار', () => {
+      const br = K.nextSession(sess, at(25));
+      const nx = K.nextSession(br, at(30));
+      assert.strictEqual(nx.mode, 'work');
+      assert.strictEqual(nx.round, 2);
+      assert.strictEqual(nx.minutes, K.FOCUS.work);
+    });
+    t('تمرکز: زمانِ کارشده گِرد می‌شود و از سقف نمی‌گذرد', () => {
+      assert.strictEqual(K.workedMinutes(sess, at(12)), 12);
+      assert.strictEqual(K.workedMinutes(sess, at(40)), 25, 'بیشتر از مدتِ جلسه ثبت نمی‌شود');
+      assert.strictEqual(K.workedMinutes(sess, T0), 0);
+    });
+    t('تمرکز: زمانِ استراحت جزو کار حساب نمی‌شود', () =>
+      assert.strictEqual(K.workedMinutes({ ...sess, mode: 'break' }, at(5)), 0));
+    t('تمرکز: جمعِ امروز با عوض‌شدن روز صفر می‌شود', () => {
+      const log = { day: '2026-07-28', rounds: 3, minutes: 75 };
+      assert.strictEqual(K.todayFocus(log, new Date(2026, 6, 28)).rounds, 3);
+      const other = K.todayFocus(log, new Date(2026, 7, 20));
+      assert.strictEqual(other.rounds, 0);
+      assert.strictEqual(other.minutes, 0);
+    });
+    t('تمرکز: افزودن دور، جمع را درست بالا می‌برد', () => {
+      let log = K.addFocus(null, 25, T0);
+      assert.deepStrictEqual([log.rounds, log.minutes], [1, 25]);
+      log = K.addFocus(log, 25, T0);
+      assert.deepStrictEqual([log.rounds, log.minutes], [2, 50]);
+    });
+
     t('سخن: تصادفی از همان مجموعه است', () => {
       const r = K.randomSaying('poem');
       assert.ok(K.SAYINGS.some(s => s.lines[0] === r.lines[0] && s.kind === 'poem'));

@@ -40,6 +40,11 @@ const Store = (() => {
     newsSources: ['zoomit', 'digiato'],
     kioskCards: ['calendar', 'beyt'],  // کارت‌های روشنِ صفحهٔ کیوسک
     prayerCity: 'تهران',               // مبنای محاسبهٔ اوقات شرعی (آفلاین)
+    quotesOn: false,                   // گرفتن نقل‌قول تازه از اینترنت — پیش‌فرض خاموش
+    quotesCache: [],                   // نقل‌قول‌های گرفته‌شده، محلی ذخیره می‌مانند
+    quotesFetchedAt: 0,
+    focusSession: null,                // تایمر تمرکزِ در جریان
+    focusLog: null,                    // { day, rounds, minutes } — جمعِ امروز
     looseDismissed: {}     // سرِنخ‌های «از جلسه‌ها چه ماند» که کاربر نادیده گرفته: { کلید: زمان }
   };
 

@@ -257,24 +257,125 @@ const Kiosk = (() => {
   ];
 
   const POETS = [...new Set(SAYINGS.map(s => s.poet))];
-  const filterSayings = (mode) =>
-    mode === 'poem' ? SAYINGS.filter(s => s.kind === 'poem')
-      : mode === 'quote' ? SAYINGS.filter(s => s.kind === 'quote')
-        : SAYINGS;
+
+  // ── نقل‌قول‌های تازه از اینترنت ──────────────────────
+  // مجموعهٔ محلی همیشه هست و کار می‌کند؛ این فقط رویش اضافه می‌شود.
+  // هرچه گرفته شد محلی ذخیره می‌ماند، پس با گذشتِ زمان مجموعه بزرگ‌تر می‌شود
+  // و دفعهٔ بعد حتی بدون اینترنت هم همان‌ها را دارید.
+  const QUOTE_FEED = 'https://zenquotes.io/api/quotes';
+  const MAX_FETCHED = 300;         // سقفِ نگه‌داری تا حافظه بی‌کران نشود
+  const QUOTE_REFRESH_MS = 12 * 3600 * 1000;
+
+  // پاسخِ سرویس ممکن است هر شکلی باشد؛ فقط چیزی که واقعاً نقل‌قول است رد می‌شود
+  function parseQuotes(raw) {
+    let data = raw;
+    if (typeof raw === 'string') { try { data = JSON.parse(raw); } catch (_) { return []; } }
+    const rows = Array.isArray(data) ? data : (data && Array.isArray(data.quotes) ? data.quotes : []);
+    const out = [];
+    const seen = new Set();
+    for (const r of rows) {
+      if (!r || typeof r !== 'object') continue;
+      const text = String(r.q ?? r.quote ?? r.text ?? r.content ?? '').trim();
+      const who = String(r.a ?? r.author ?? '').trim();
+      if (text.length < 15 || text.length > 320) continue;      // تیتر و پاراگراف، هیچ‌کدام
+      if (!who || who.length > 60) continue;
+      if (/^(zenquotes|unknown|anonymous)/i.test(who)) continue; // ردیفِ تبلیغاتی یا بی‌گوینده
+      const key = text.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ kind: 'quote', poet: who, lines: [text], src: 'web' });
+    }
+    return out;
+  }
+
+  // مجموعهٔ محلی + هرچه از وب گرفته شده، بدون تکرار
+  function allSayings(fetched) {
+    const extra = (fetched || []).filter(s => s && s.lines && s.lines[0]);
+    if (!extra.length) return SAYINGS;
+    const have = new Set(SAYINGS.map(s => s.lines[0].toLowerCase()));
+    return [...SAYINGS, ...extra.filter(s => !have.has(s.lines[0].toLowerCase()))];
+  }
+  const filterSayings = (mode, fetched) => {
+    const pool = allSayings(fetched);
+    return mode === 'poem' ? pool.filter(s => s.kind === 'poem')
+      : mode === 'quote' ? pool.filter(s => s.kind === 'quote')
+        : pool;
+  };
+  const trimQuotes = (list) => (list || []).slice(-MAX_FETCHED);
 
   // انتخابِ روزانه باید پایدار باشد: یک روز، یک سخن — نه هر بار رندر یک چیز تازه
-  function sayingOfDay(now = new Date(), mode = 'all') {
-    const pool = filterSayings(mode);
+  function sayingOfDay(now = new Date(), mode = 'all', fetched) {
+    const pool = filterSayings(mode, fetched);
     if (!pool.length) return null;
     const key = Math.floor(midnight(now).getTime() / DAY);
     return pool[((key % pool.length) + pool.length) % pool.length];
   }
-  function randomSaying(mode = 'all', not = null) {
-    const pool = filterSayings(mode);
+  function randomSaying(mode = 'all', not = null, fetched) {
+    const pool = filterSayings(mode, fetched);
     if (!pool.length) return null;
     // پشتِ سرِ هم همان سخن را نده — «یکی دیگر» باید واقعاً چیزِ دیگری بدهد
     const choices = pool.length > 1 && not ? pool.filter(s => s.lines[0] !== not) : pool;
     return choices[Math.floor(Math.random() * choices.length)];
+  }
+
+  // ── تایمر تمرکز ─────────────────────────────────────
+  // زمانِ باقی‌مانده از ساعتِ دیوار حساب می‌شود، نه از شمارشِ داخلی؛ پس اگر تب
+  // بسته یا کند شود (مرورگر تایمرِ تبِ پنهان را throttle می‌کند) عدد درست می‌ماند.
+  const FOCUS = { work: 25, shortBreak: 5, longBreak: 15, longEvery: 4 };
+
+  function focusState(session, now = new Date()) {
+    if (!session || !session.startedAt || !session.minutes) return { phase: 'idle', leftSec: 0, pct: 0 };
+    const total = session.minutes * 60;
+    const elapsed = Math.max(0, (now.getTime() - session.startedAt) / 1000);
+    const leftSec = Math.max(0, Math.ceil(total - elapsed));
+    return {
+      phase: leftSec === 0 ? 'done' : (session.mode || 'work'),
+      mode: session.mode || 'work',
+      leftSec,
+      elapsedMin: Math.min(session.minutes, Math.floor(elapsed / 60)),
+      pct: Math.min(100, Math.round(elapsed / total * 100)),
+      round: session.round || 1,
+      taskId: session.taskId || null
+    };
+  }
+
+  const clock = (sec) => {
+    const s = Math.max(0, Math.round(sec));
+    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  };
+
+  // بعد از هر کارِ تمام‌شده، استراحت؛ بعد از هر ۴ دور، استراحتِ بلند
+  function nextSession(session, now = new Date()) {
+    const round = session?.round || 1;
+    if (!session || session.mode === 'break') {
+      return { mode: 'work', minutes: FOCUS.work, round: session ? round + 1 : 1,
+        taskId: session?.taskId || null, startedAt: now.getTime() };
+    }
+    const isLong = round % FOCUS.longEvery === 0;
+    return { mode: 'break', minutes: isLong ? FOCUS.longBreak : FOCUS.shortBreak,
+      round, taskId: session.taskId || null, startedAt: now.getTime() };
+  }
+
+  function startSession(taskId, minutes, now = new Date(), round = 1) {
+    return { taskId: taskId || null, minutes: minutes || FOCUS.work, mode: 'work', round, startedAt: now.getTime() };
+  }
+
+  // چند دقیقه واقعاً کار شد — برای وقتی کاربر وسطِ کار «تمامش کردم» را می‌زند
+  function workedMinutes(session, now = new Date()) {
+    if (!session || session.mode !== 'work') return 0;
+    const elapsed = (now.getTime() - session.startedAt) / 60000;
+    return Math.max(0, Math.min(session.minutes, Math.round(elapsed)));
+  }
+
+  // جمعِ امروز — با عوض‌شدنِ روز خودش صفر می‌شود
+  function todayFocus(log, now = new Date()) {
+    const day = J.iso(now);
+    return (log && log.day === day) ? { day, rounds: log.rounds || 0, minutes: log.minutes || 0 }
+      : { day, rounds: 0, minutes: 0 };
+  }
+  function addFocus(log, minutes, now = new Date()) {
+    const cur = todayFocus(log, now);
+    return { day: cur.day, rounds: cur.rounds + 1, minutes: cur.minutes + Math.max(0, minutes || 0) };
   }
 
   // ── عکسِ خبر ─────────────────────────────────────────
@@ -300,7 +401,9 @@ const Kiosk = (() => {
     OCCASIONS, CITIES, IRAN_TZ, PRAYER_LABELS, safeImageUrl, imageFromHtml,
     occasionsOf, upcomingOccasions, nextHoliday, todayOccasions, daysUntil,
     countdowns, prayerTimes, nextPrayer, hhmm, cityByName,
-    sayingOfDay, randomSaying, filterSayings, SAYINGS, POETS
+    sayingOfDay, randomSaying, filterSayings, allSayings, parseQuotes, trimQuotes,
+    SAYINGS, POETS, QUOTE_FEED, MAX_FETCHED, QUOTE_REFRESH_MS,
+    FOCUS, focusState, nextSession, startSession, workedMinutes, todayFocus, addFocus, clock
   };
   if (typeof globalThis !== 'undefined') globalThis.Kiosk = api;
   return api;

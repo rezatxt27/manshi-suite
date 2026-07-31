@@ -1865,3 +1865,49 @@ small { font-size: 12px; }
 .kiosk-beyt.is-quote .kiosk-mesra { text-align: start; line-height: 1.95; font-size: 14px; }
 .kiosk-by { margin: 6px 0 0; text-align: center; font-size: 12px; font-weight: 700; color: var(--tint, var(--text-3)); }
 .kiosk-beyt.is-quote .kiosk-by { text-align: end; }
+
+/* ══ سخن روز ══
+   دکمه‌های دسته قبلاً کلاسی می‌گرفتند که در CSS نبود، پس خامِ مرورگر
+   رندر می‌شدند — همان چیزی که در تصویر بدشکل دیده می‌شد. */
+.say-tabs { display: flex; gap: 5px; flex-wrap: wrap; }
+.say-tab {
+  font: inherit; font-size: 12px; font-weight: 700; padding: 3px 12px; border-radius: 999px;
+  background: var(--surface-2); color: var(--text-3);
+  border: 1px solid var(--border-soft); cursor: pointer;
+  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.say-tab:hover { color: var(--text-2); border-color: var(--border); }
+.say-tab.is-on { background: var(--violet-soft); color: var(--violet); border-color: transparent; }
+.say-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* نقل‌قولِ انگلیسی چپ‌به‌راست خوانده می‌شود */
+.kiosk-beyt.is-latin { direction: ltr; }
+.kiosk-beyt.is-latin .kiosk-mesra { text-align: start; font-size: 14.5px; line-height: 1.75; }
+.kiosk-beyt.is-latin .kiosk-by { text-align: end; }
+.kiosk-beyt.is-latin .kiosk-by::before { content: "— "; }
+
+/* ══ تایمر تمرکز ══ */
+.focus-ring {
+  --pct: 0;
+  width: 148px; height: 148px; border-radius: 50%; margin: 2px auto 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  background:
+    radial-gradient(closest-side, var(--surface) 78%, transparent 79%),
+    conic-gradient(var(--accent) calc(var(--pct) * 1%), var(--border-soft) 0);
+}
+.focus-ring.is-break { background:
+    radial-gradient(closest-side, var(--surface) 78%, transparent 79%),
+    conic-gradient(var(--blue) calc(var(--pct) * 1%), var(--border-soft) 0); }
+.focus-ring.is-done { background:
+    radial-gradient(closest-side, var(--surface) 78%, transparent 79%),
+    conic-gradient(var(--amber) 100%, var(--amber) 0); }
+.focus-time { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text); letter-spacing: .5px; }
+.focus-mode { font-size: 12px; font-weight: 700; color: var(--text-3); }
+.focus-task {
+  margin: 0; text-align: center; font-size: 13.5px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.focus-sum {
+  margin: 0; text-align: center; font-size: 12px; color: var(--text-3);
+  border-top: 1px dashed var(--border-soft); padding-top: 9px;
+}

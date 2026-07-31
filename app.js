@@ -709,14 +709,17 @@
   }
 
   // ── فرمِ سربرگ: شهرهای ساعت + کارت اخبار ──
-  let heroPrefs = { zones: [], newsOn: false, sources: [] };
+  let heroPrefs = { zones: [], newsOn: false, sources: [], quotesOn: false };
 
   function paintHeroPrefs(s) {
     heroPrefs = {
       zones: [...(s.clockZones || [])],
       newsOn: !!s.newsOn,
-      sources: [...(s.newsSources || [])]
+      sources: [...(s.newsSources || [])],
+      quotesOn: !!s.quotesOn
     };
+    const qc = $('#setQuotesOn');
+    if (qc) { qc.checked = heroPrefs.quotesOn; qc.onchange = () => { heroPrefs.quotesOn = qc.checked; }; }
     const zp = $('#zonePicker');
     if (zp) {
       zp.replaceChildren();
@@ -828,10 +831,18 @@
         } catch (_) { say('دسترسی گرفته نشد'); heroPrefs.newsOn = false; $('#setNewsOn').checked = false; }
       }
     }
+    if (heroPrefs.quotesOn && Store.isExt && chrome.permissions) {
+      const o = new URL(Kiosk.QUOTE_FEED).origin + '/*';
+      try {
+        const granted = await chrome.permissions.request({ origins: [o] });
+        if (!granted) { say('بدون دسترسی، سخن تازه گرفته نمی‌شود'); heroPrefs.quotesOn = false; $('#setQuotesOn').checked = false; }
+      } catch (_) { heroPrefs.quotesOn = false; $('#setQuotesOn').checked = false; }
+    }
     await Store.saveSettings({
       clockZones: heroPrefs.zones,
       newsOn: heroPrefs.newsOn,
-      newsSources: heroPrefs.sources
+      newsSources: heroPrefs.sources,
+      quotesOn: heroPrefs.quotesOn
     });
     newsItems = []; newsLoadedAt = 0;   // فید تازه با منابع جدید
     if (st && !st.textContent) say('ذخیره شد ✓');
@@ -4473,7 +4484,8 @@
   const KIOSK_CARDS = [
     ['calendar', 'تقویم و مناسبت‌ها', 'شمارش معکوس و مناسبت‌های پیشِ رو — آفلاین'],
     ['prayer', 'اوقات شرعی', 'روی همین دستگاه حساب می‌شود — آفلاین'],
-    ['beyt', 'سخن روز', 'شعر فارسی و نقل‌قولِ آدم‌های بزرگ — آفلاین'],
+    ['focus', 'تایمر تمرکز', 'دورِ ۲۵ دقیقه‌ای روی یک کار — زمانش روی همان کار ثبت می‌شود'],
+    ['beyt', 'سخن روز', 'شعر فارسی و نقل‌قولِ آدم‌های بزرگ — آفلاین، با امکان تازه‌سازی'],
     ['market', 'بازار', 'دلار، طلا و سکه — به سایت بیرونی وصل می‌شود'],
     ['news', 'اخبار', 'فناوری، ورزشی، اقتصاد و عمومی — به سایت بیرونی وصل می‌شود']
   ];
@@ -4678,14 +4690,163 @@
     return card;
   }
 
+  // ── تایمر تمرکز ─────────────────────────────────────
+  // یک دورِ ۲۵ دقیقه‌ای روی یک کارِ مشخص. وقتی تمام شد، همان دقیقه‌ها روی
+  // خودِ کار ثبت می‌شود تا کنارِ «تخمین زمان» معنا پیدا کند.
+  let focusTick = null;
+
+  async function startFocus(taskId, minutes) {
+    const s = await Store.getSettings();
+    const prev = s.focusSession;
+    const round = prev && prev.mode === 'break' ? (prev.round || 1) + 1 : 1;
+    await Store.saveSettings({ focusSession: Kiosk.startSession(taskId, minutes, new Date(), round) });
+    renderKiosk();
+  }
+
+  // ثبتِ زمانِ کارشده روی کار و رفتن به مرحلهٔ بعد
+  async function finishFocus(goNext) {
+    const s = await Store.getSettings();
+    const sess = s.focusSession;
+    if (!sess) return;
+    const worked = Kiosk.workedMinutes(sess, new Date());
+    const patch = { focusSession: goNext ? Kiosk.nextSession(sess, new Date()) : null };
+    if (worked > 0) {
+      patch.focusLog = Kiosk.addFocus(s.focusLog, worked, new Date());
+      if (sess.taskId) {
+        const t = (await Store.getTasks()).find(x => x.id === sess.taskId);
+        if (t) await Store.updateTask(t.id, { focusMin: (t.focusMin || 0) + worked });
+      }
+    }
+    await Store.saveSettings(patch);
+    if (worked > 0) toast(`${J.faDigits(worked)} دقیقه تمرکز ثبت شد`);
+    renderKiosk();
+  }
+
+  async function cancelFocus() {
+    await Store.saveSettings({ focusSession: null });
+    renderKiosk();
+  }
+
+  function buildFocusCard(settings, tasks) {
+    const card = kioskCard('تمرکز', '');
+    card.classList.add('tint-green');
+    const now = new Date();
+    const st = Kiosk.focusState(settings.focusSession, now);
+    const today = Kiosk.todayFocus(settings.focusLog, now);
+    const task = settings.focusSession?.taskId
+      ? (tasks || []).find(t => t.id === settings.focusSession.taskId) : null;
+
+    if (st.phase === 'idle') {
+      const open = (tasks || []).filter(t => t.status === 'open' && t.dir === 'mine');
+      if (!open.length) {
+        card.append(el('p', 'kiosk-note', 'اول یک کار در «کارها» بنویس، بعد اینجا برایش دور بگذار.'));
+        return card;
+      }
+      const pick = el('label', 'kiosk-city');
+      pick.append(el('span', null, 'روی چه کاری'));
+      const sel = el('select');
+      sel.id = 'focusTask';
+      for (const t of open.slice(0, 30)) {
+        const o = document.createElement('option');
+        o.value = t.id;
+        o.textContent = t.title + (t.estimate ? ` (${humanDur(t.estimate)})` : '');
+        sel.append(o);
+      }
+      pick.append(sel);
+      card.append(pick);
+      const row = el('div', 'kiosk-acts');
+      const go = el('button', 'btn btn-primary btn-sm', `شروع ${J.faDigits(Kiosk.FOCUS.work)} دقیقه`);
+      go.addEventListener('click', () => startFocus(sel.value, Kiosk.FOCUS.work));
+      row.append(go);
+      for (const m of [15, 50]) {
+        const b = el('button', 'btn btn-ghost btn-sm', `${J.faDigits(m)} دقیقه`);
+        b.addEventListener('click', () => startFocus(sel.value, m));
+        row.append(b);
+      }
+      card.append(row);
+    } else {
+      const isBreak = st.mode === 'break';
+      const done = st.phase === 'done';
+      const ring = el('div', 'focus-ring' + (isBreak ? ' is-break' : '') + (done ? ' is-done' : ''));
+      ring.style.setProperty('--pct', String(st.pct));
+      ring.append(el('span', 'focus-time', J.faDigits(Kiosk.clock(st.leftSec))));
+      ring.append(el('span', 'focus-mode', done ? 'تمام شد' : isBreak ? 'استراحت' : `دور ${J.faDigits(st.round)}`));
+      card.append(ring);
+      if (task) card.append(el('p', 'focus-task', task.title));
+      if (task?.estimate) {
+        card.append(el('p', 'kiosk-note',
+          `تخمین ${humanDur(task.estimate)} · تا حالا ${humanDur((task.focusMin || 0) + (isBreak ? 0 : st.elapsedMin))} کار شده`));
+      }
+      const row = el('div', 'kiosk-acts');
+      if (done) {
+        const nx = el('button', 'btn btn-primary btn-sm', isBreak ? 'دور بعدی' : 'استراحت');
+        nx.addEventListener('click', () => finishFocus(true));
+        const stop = el('button', 'btn btn-ghost btn-sm', 'بس است');
+        stop.addEventListener('click', () => finishFocus(false));
+        row.append(nx, stop);
+      } else {
+        const fin = el('button', 'btn btn-ghost btn-sm', isBreak ? 'رد کن' : 'تمامش کردم');
+        fin.addEventListener('click', () => finishFocus(!isBreak));
+        const cancel = el('button', 'btn btn-ghost btn-sm', 'لغو');
+        cancel.addEventListener('click', cancelFocus);
+        row.append(fin, cancel);
+      }
+      card.append(row);
+    }
+
+    if (today.rounds) {
+      card.append(el('p', 'focus-sum',
+        `امروز ${J.faDigits(today.rounds)} دور · ${humanDur(today.minutes)} تمرکز`));
+    }
+    return card;
+  }
+
   let sayingMode = 'all';   // all | poem | quote
-  function buildSayingCard(now) {
-    const card = kioskCard('سخن روز', `${J.faDigits(Kiosk.SAYINGS.length)} سخن`);
+  let quoteCache = [];      // نقل‌قول‌های گرفته‌شده از وب (از تنظیمات خوانده می‌شود)
+
+  // گرفتنِ نقل‌قولِ تازه — همان الگوی اخبار و بازار: اختیاری، اجازه‌محور و خودآزما
+  async function fetchQuotes() {
+    const origin = new URL(Kiosk.QUOTE_FEED).origin + '/*';
+    if (Store.isExt && chrome.permissions) {
+      try {
+        const has = await chrome.permissions.contains({ origins: [origin] });
+        if (!has) return { items: [], error: 'دسترسی به این سایت داده نشده' };
+      } catch (_) { /* ادامه بده */ }
+    }
+    let r;
+    try { r = await fetch(Kiosk.QUOTE_FEED, { cache: 'no-store' }); }
+    catch (_) { return { items: [], error: Store.isExt ? 'سایت پاسخ نداد (شبکه یا فیلترینگ)' : 'در پیش‌نمایش مرورگر ممکن نیست (CORS)' }; }
+    if (!r.ok) return { items: [], error: `سایت خطای ${J.faDigits(r.status)} داد` };
+    let text = '';
+    try { text = await r.text(); } catch (_) { return { items: [], error: 'پاسخ خوانده نشد' }; }
+    const items = Kiosk.parseQuotes(text);
+    return items.length ? { items, error: '' } : { items: [], error: 'چیزی که برگشت نقل‌قول نبود' };
+  }
+
+  async function refreshQuotes(silent) {
+    const s = await Store.getSettings();
+    if (!s.quotesOn) return;
+    const { items, error } = await fetchQuotes();
+    if (error) { if (!silent) toast('تازه‌سازی نشد — ' + error); return; }
+    const have = new Set((s.quotesCache || []).map(q => q.lines[0].toLowerCase()));
+    const fresh = items.filter(q => !have.has(q.lines[0].toLowerCase()));
+    const merged = Kiosk.trimQuotes([...(s.quotesCache || []), ...fresh]);
+    await Store.saveSettings({ quotesCache: merged, quotesFetchedAt: Date.now() });
+    quoteCache = merged;
+    if (!silent) toast(fresh.length ? `${J.faDigits(fresh.length)} سخن تازه اضافه شد` : 'چیز تازه‌ای نبود');
+    renderKiosk();
+  }
+
+  function buildSayingCard(now, settings) {
+    const total = Kiosk.allSayings(quoteCache).length;
+    const card = kioskCard('سخن روز', `${J.faDigits(total)} سخن`);
     card.classList.add('tint-violet');
 
-    const tabs = el('div', 'news-cats');
+    // این دکمه‌ها قبلاً کلاسی می‌گرفتند که در CSS وجود نداشت، پس خام و بدشکل بودند
+    const tabs = el('div', 'say-tabs');
     for (const [key, label] of [['all', 'همه'], ['poem', 'شعر'], ['quote', 'نقل‌قول']]) {
-      const b = el('button', 'news-cat' + (sayingMode === key ? ' is-on' : ''), label);
+      const b = el('button', 'say-tab' + (sayingMode === key ? ' is-on' : ''), label);
+      b.type = 'button';
       b.addEventListener('click', () => { sayingMode = key; renderKiosk(); });
       tabs.append(b);
     }
@@ -4698,15 +4859,18 @@
       box.replaceChildren();
       if (!s) { box.append(el('p', 'kiosk-mesra', '—')); return; }
       box.classList.toggle('is-quote', s.kind === 'quote');
+      box.classList.toggle('is-latin', /^[\x00-\x7F\s'"’“”—–,.!?;:()-]+$/.test(s.lines[0]));
       for (const line of s.lines) box.append(el('p', 'kiosk-mesra', line));
-      box.append(el('p', 'kiosk-by', s.poet));
+      const by = el('p', 'kiosk-by', s.poet);
+      if (s.src === 'web') by.title = 'از zenquotes.io گرفته شده';
+      box.append(by);
     };
-    paint(Kiosk.sayingOfDay(now, sayingMode));
+    paint(Kiosk.sayingOfDay(now, sayingMode, quoteCache));
     card.append(box);
 
     const acts = el('div', 'kiosk-acts');
     const again = el('button', 'btn btn-ghost btn-sm', 'یکی دیگر');
-    again.addEventListener('click', () => paint(Kiosk.randomSaying(sayingMode, current?.lines[0])));
+    again.addEventListener('click', () => paint(Kiosk.randomSaying(sayingMode, current?.lines[0], quoteCache)));
     const copy = el('button', 'btn btn-ghost btn-sm', 'کپی');
     copy.addEventListener('click', async () => {
       if (!current) return;
@@ -4714,7 +4878,24 @@
       toast('کپی شد');
     });
     acts.append(again, copy);
+
+    // تازه‌سازی از وب — فقط وقتی خودش روشنش کرده باشد
+    if (settings?.quotesOn) {
+      const upd = el('button', 'btn btn-ghost btn-sm', 'تازه‌سازی');
+      upd.title = 'سخن‌های تازه از zenquotes.io — هرچه گرفته شد محلی می‌ماند';
+      upd.addEventListener('click', async () => {
+        upd.disabled = true; upd.textContent = 'در حال گرفتن…';
+        await refreshQuotes(false);
+      });
+      acts.append(upd);
+    }
     card.append(acts);
+
+    const web = quoteCache.length;
+    if (web) {
+      const n = el('p', 'kiosk-note', `${J.faDigits(web)} سخن از اینترنت گرفته و اینجا ذخیره شده — بدون اینترنت هم می‌مانند.`);
+      card.append(n);
+    }
     return card;
   }
 
@@ -4819,11 +5000,31 @@
     placePop(pop, anchor);
   }
 
+  // شمارنده هر ثانیه فقط وقتی جلسه‌ای در جریان است — وگرنه رندرِ بیهوده
+  function syncFocusTick(settings) {
+    const st = Kiosk.focusState(settings.focusSession, new Date());
+    const live = st.phase === 'work' || st.phase === 'break';
+    if (live && !focusTick) {
+      focusTick = setInterval(() => {
+        const view = document.getElementById('view-kiosk');
+        if (!view || !view.classList.contains('is-active')) return;
+        renderKiosk();
+      }, 1000);
+    } else if (!live && focusTick) { clearInterval(focusTick); focusTick = null; }
+  }
+
   async function renderKiosk() {
     const grid = $('#kioskGrid');
     if (!grid) return;
     const settings = await Store.getSettings();
     const on = settings.kioskCards || [];
+    quoteCache = settings.quotesCache || [];
+    syncFocusTick(settings);
+    // تازه‌سازیِ خودکار در پس‌زمینه، بی‌سروصدا؛ خطایش صفحه را نمی‌شکند
+    if (settings.quotesOn && on.includes('beyt')
+        && Date.now() - (settings.quotesFetchedAt || 0) > Kiosk.QUOTE_REFRESH_MS) {
+      setTimeout(() => refreshQuotes(true), 0);
+    }
     const now = new Date();
     $('#kioskSub').textContent = J.format(now);
     grid.replaceChildren();
@@ -4836,9 +5037,11 @@
       grid.append(e);
       return;
     }
+    // تایمر اول می‌آید — وقتی در جریان است، مهم‌ترین چیزِ صفحه است
+    if (on.includes('focus')) grid.append(buildFocusCard(settings, await Store.getTasks()));
     if (on.includes('calendar')) grid.append(buildCalendarCard(now));
     if (on.includes('prayer')) grid.append(buildPrayerCard(now, settings.prayerCity));
-    if (on.includes('beyt')) grid.append(buildSayingCard(now));
+    if (on.includes('beyt')) grid.append(buildSayingCard(now, settings));
     if (on.includes('market')) {
       const ph = buildMarketCard();
       grid.append(ph);
