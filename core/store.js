@@ -45,6 +45,7 @@ const Store = (() => {
     quotesFetchedAt: 0,
     focusSession: null,                // تایمر تمرکزِ در جریان
     focusLog: null,                    // { day, rounds, minutes } — جمعِ امروز
+    customFeeds: [],                   // منبع‌های خبرِ دستیِ کاربر
     looseDismissed: {}     // سرِنخ‌های «از جلسه‌ها چه ماند» که کاربر نادیده گرفته: { کلید: زمان }
   };
 

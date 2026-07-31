@@ -517,6 +517,22 @@
           <button type="button" class="btn btn-ghost btn-sm" id="grantNews">دادن دسترسی به سایت‌ها</button>
         </div>
         <div id="newsDiag" class="news-diag" hidden></div>
+
+        <!-- منبع دستی: هر فید RSS/Atom دیگری که کاربر بخواهد -->
+        <div class="feed-add">
+          <span class="feed-add-title">منبع خودت را اضافه کن</span>
+          <div id="customFeedList" class="feed-list"></div>
+          <div class="feed-row">
+            <input type="text" id="cfName" maxlength="40" placeholder="نام دلخواه (اختیاری)">
+            <select id="cfCat" aria-label="دستهٔ منبع"></select>
+          </div>
+          <div class="feed-row">
+            <input type="url" id="cfUrl" dir="ltr" placeholder="https://example.com/feed">
+            <button type="button" class="btn btn-ghost btn-sm" id="cfAdd">افزودن</button>
+          </div>
+          <small class="field-hint">آدرسِ فید RSS یا Atom را بده — معمولاً <code dir="ltr">/feed</code> یا <code dir="ltr">/rss</code> انتهای آدرسِ سایت. عکسِ خبر هم اگر فید داشته باشد خودکار نشان داده می‌شود.</small>
+          <span class="field-status" id="cfStatus"></span>
+        </div>
       </div>
       <div class="btn-row"><button class="btn btn-primary" id="saveHero">ذخیره</button><span class="field-status" id="heroStatus"></span></div>
     </details>

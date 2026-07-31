@@ -262,7 +262,14 @@ const Kiosk = (() => {
   // مجموعهٔ محلی همیشه هست و کار می‌کند؛ این فقط رویش اضافه می‌شود.
   // هرچه گرفته شد محلی ذخیره می‌ماند، پس با گذشتِ زمان مجموعه بزرگ‌تر می‌شود
   // و دفعهٔ بعد حتی بدون اینترنت هم همان‌ها را دارید.
-  const QUOTE_FEED = 'https://zenquotes.io/api/quotes';
+  // چند منبع، به ترتیب امتحان می‌شوند تا یکی جواب بدهد. شکلِ پاسخِ هرکدام فرق
+  // دارد (q/a ، quote/author ، text/author) و parseQuotes هر سه را می‌فهمد.
+  const QUOTE_FEEDS = [
+    { id: 'zenquotes', name: 'ZenQuotes', url: 'https://zenquotes.io/api/quotes' },
+    { id: 'dummyjson', name: 'DummyJSON', url: 'https://dummyjson.com/quotes?limit=30' },
+    { id: 'typefit', name: 'Type.fit', url: 'https://type.fit/api/quotes' }
+  ];
+  const QUOTE_FEED = QUOTE_FEEDS[0].url;   // سازگاری عقب‌رو
   const MAX_FETCHED = 300;         // سقفِ نگه‌داری تا حافظه بی‌کران نشود
   const QUOTE_REFRESH_MS = 12 * 3600 * 1000;
 
@@ -316,6 +323,35 @@ const Kiosk = (() => {
     // پشتِ سرِ هم همان سخن را نده — «یکی دیگر» باید واقعاً چیزِ دیگری بدهد
     const choices = pool.length > 1 && not ? pool.filter(s => s.lines[0] !== not) : pool;
     return choices[Math.floor(Math.random() * choices.length)];
+  }
+
+  // ── منبعِ خبرِ دستی ──────────────────────────────────
+  // کاربر می‌تواند فیدِ خودش را اضافه کند. ورودیِ کاربر است، پس سخت‌گیرانه
+  // بررسی می‌شود: فقط https، آدرسِ سالم، و نامی که خودِ ما نمایش می‌دهیم.
+  const FEED_CATS = ['فناوری', 'ورزشی', 'اقتصاد', 'عمومی'];
+  const MAX_CUSTOM_FEEDS = 12;
+
+  function normalizeFeed(input, existing = []) {
+    const name = String(input?.name || '').trim().slice(0, 40);
+    const raw = String(input?.url || '').trim();
+    const cat = FEED_CATS.includes(input?.cat) ? input.cat : 'عمومی';
+    if (!raw) return { error: 'آدرس فید را بنویس' };
+    let u;
+    try { u = new URL(raw); } catch (_) { return { error: 'آدرس معتبر نیست' }; }
+    if (u.protocol !== 'https:') return { error: 'فقط آدرس https پذیرفته می‌شود' };
+    if (existing.some(f => f.url === u.href && f.id !== input?.id)) return { error: 'این آدرس از قبل هست' };
+    if (existing.filter(f => f.id !== input?.id).length >= MAX_CUSTOM_FEEDS) {
+      return { error: `بیشتر از ${MAX_CUSTOM_FEEDS} منبع نمی‌شود` };
+    }
+    return {
+      feed: {
+        id: input?.id || 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        name: name || u.hostname.replace(/^www\./, ''),
+        cat,
+        url: u.href,
+        custom: true
+      }
+    };
   }
 
   // ── تایمر تمرکز ─────────────────────────────────────
@@ -402,8 +438,9 @@ const Kiosk = (() => {
     occasionsOf, upcomingOccasions, nextHoliday, todayOccasions, daysUntil,
     countdowns, prayerTimes, nextPrayer, hhmm, cityByName,
     sayingOfDay, randomSaying, filterSayings, allSayings, parseQuotes, trimQuotes,
-    SAYINGS, POETS, QUOTE_FEED, MAX_FETCHED, QUOTE_REFRESH_MS,
-    FOCUS, focusState, nextSession, startSession, workedMinutes, todayFocus, addFocus, clock
+    SAYINGS, POETS, QUOTE_FEED, QUOTE_FEEDS, MAX_FETCHED, QUOTE_REFRESH_MS,
+    FOCUS, focusState, nextSession, startSession, workedMinutes, todayFocus, addFocus, clock,
+    FEED_CATS, MAX_CUSTOM_FEEDS, normalizeFeed
   };
   if (typeof globalThis !== 'undefined') globalThis.Kiosk = api;
   return api;

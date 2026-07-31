@@ -613,7 +613,8 @@
   let newsStatus = [];
 
   async function fetchFeed(key) {
-    const f = NEWS_FEEDS[key];
+    const f = allFeeds()[key];
+    if (!f) return { key, name: key, items: [], error: 'منبع پیدا نشد' };
     const origin = new URL(f.url).origin + '/*';
     if (Store.isExt && chrome.permissions) {
       try {
@@ -638,8 +639,17 @@
     return { key, name: f.name, items, error: '' };
   }
 
+  // منبع‌های آمادهٔ خودمان + هرچه کاربر دستی اضافه کرده
+  let customFeeds = [];
+  const allFeeds = () => {
+    const out = { ...NEWS_FEEDS };
+    for (const f of customFeeds) out[f.id] = { name: f.name, cat: f.cat, url: f.url, custom: true };
+    return out;
+  };
+
   async function loadNews(sources) {
-    const picked = (sources || []).filter(k => NEWS_FEEDS[k]);
+    const feeds = allFeeds();
+    const picked = (sources || []).filter(k => feeds[k]);
     newsStatus = [];
     if (!picked.length) { newsItems = []; return; }
     const results = await Promise.all(picked.map(fetchFeed));
@@ -718,6 +728,8 @@
       sources: [...(s.newsSources || [])],
       quotesOn: !!s.quotesOn
     };
+    customFeeds = [...(s.customFeeds || [])];
+    renderCustomFeeds();
     const qc = $('#setQuotesOn');
     if (qc) { qc.checked = heroPrefs.quotesOn; qc.onchange = () => { heroPrefs.quotesOn = qc.checked; }; }
     const zp = $('#zonePicker');
@@ -750,7 +762,7 @@
       np.replaceChildren();
       // دسته‌بندی‌شده — فهرستِ تخت با ۹ منبع خوانده نمی‌شد
       for (const cat of NEWS_CATS) {
-        const inCat = Object.entries(NEWS_FEEDS).filter(([, f]) => f.cat === cat);
+        const inCat = Object.entries(allFeeds()).filter(([, f]) => f.cat === cat);
         if (!inCat.length) continue;
         const row = el('div', 'news-cat-row');
         row.append(el('span', 'news-cat-label', cat));
@@ -769,6 +781,81 @@
     }
   }
 
+  // ── منبع‌های خبرِ دستی ──────────────────────────────
+  function renderCustomFeeds() {
+    const box = $('#customFeedList');
+    if (!box) return;
+    box.replaceChildren();
+    const cat = $('#cfCat');
+    if (cat && !cat.options.length) {
+      for (const c of Kiosk.FEED_CATS) {
+        const o = document.createElement('option'); o.value = c; o.textContent = c;
+        if (c === 'عمومی') o.selected = true;
+        cat.append(o);
+      }
+    }
+    if (!customFeeds.length) { box.append(el('div', 'feed-empty', 'هنوز منبعی اضافه نکرده‌ای')); return; }
+    for (const f of customFeeds) {
+      const row = el('div', 'feed-item');
+      const on = heroPrefs.sources.includes(f.id);
+      const tog = el('button', 'zone-chip' + (on ? ' is-on' : ''), f.name);
+      tog.type = 'button';
+      tog.title = f.url;
+      tog.addEventListener('click', () => {
+        const i = heroPrefs.sources.indexOf(f.id);
+        if (i > -1) heroPrefs.sources.splice(i, 1); else heroPrefs.sources.push(f.id);
+        tog.classList.toggle('is-on');
+      });
+      const meta = el('span', 'feed-url');
+      meta.textContent = `${f.cat} · ${new URL(f.url).hostname.replace(/^www\./, '')}`;
+      const del = svgBtn('feed-del', ICONS.trash, `حذف ${f.name}`);
+      del.addEventListener('click', async () => {
+        customFeeds = customFeeds.filter(x => x.id !== f.id);
+        heroPrefs.sources = heroPrefs.sources.filter(x => x !== f.id);
+        await Store.saveSettings({ customFeeds, newsSources: heroPrefs.sources });
+        newsItems = []; newsLoadedAt = 0;
+        renderCustomFeeds();
+        toast('منبع حذف شد');
+      });
+      row.append(tog, meta, del);
+      box.append(row);
+    }
+  }
+
+  $('#cfAdd')?.addEventListener('click', async () => {
+    const st = $('#cfStatus');
+    const say = (m) => { if (st) { st.textContent = m; setTimeout(() => { st.textContent = ''; }, 4000); } };
+    const { feed, error } = Kiosk.normalizeFeed(
+      { name: $('#cfName').value, url: $('#cfUrl').value, cat: $('#cfCat').value }, customFeeds);
+    if (error) { say(error); return; }
+
+    // اول اجازهٔ همان دامنه، بعد یک آزمایشِ واقعی — منبعی که کار نمی‌کند اضافه نشود
+    const origin = new URL(feed.url).origin + '/*';
+    if (Store.isExt && chrome.permissions) {
+      try {
+        const granted = await chrome.permissions.request({ origins: [origin] });
+        if (!granted) { say('بدون دسترسی به این سایت، فیدش خوانده نمی‌شود'); return; }
+      } catch (_) { say('دسترسی گرفته نشد'); return; }
+    }
+    say('در حال آزمایش…');
+    customFeeds = [...customFeeds, feed];      // موقتی، تا fetchFeed پیدایش کند
+    const res = await fetchFeed(feed.id);
+    if (!res.items.length) {
+      customFeeds = customFeeds.filter(x => x.id !== feed.id);
+      say(res.error || 'از این آدرس خبری خوانده نشد');
+      return;
+    }
+    heroPrefs.sources = [...new Set([...heroPrefs.sources, feed.id])];
+    await Store.saveSettings({ customFeeds, newsSources: heroPrefs.sources });
+    newsItems = []; newsLoadedAt = 0;
+    $('#cfName').value = ''; $('#cfUrl').value = '';
+    renderCustomFeeds();
+    const withImg = res.items.filter(x => x.image).length;
+    say(`«${feed.name}» اضافه شد — ${J.faDigits(res.items.length)} خبر${withImg ? `، ${J.faDigits(withImg)} با عکس` : '، بدون عکس'}`);
+  });
+
+  $('#cfUrl')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#cfAdd').click(); } });
+
   $('#grantNews')?.addEventListener('click', async () => {
     const box = $('#newsDiag'); box.hidden = false; box.replaceChildren();
     if (!Store.isExt || !chrome.permissions) {
@@ -777,8 +864,8 @@
     }
     // منابعِ خبر + سایتِ قیمت، چون هر دو در کیوسک استفاده می‌شوند
     const origins = [...new Set([
-      ...(heroPrefs.sources.length ? heroPrefs.sources : Object.keys(NEWS_FEEDS))
-        .filter(k => NEWS_FEEDS[k]).map(k => new URL(NEWS_FEEDS[k].url).origin + '/*'),
+      ...(heroPrefs.sources.length ? heroPrefs.sources : Object.keys(allFeeds()))
+        .filter(k => allFeeds()[k]).map(k => new URL(allFeeds()[k].url).origin + "/*"),
       ...MARKET_PAGES.map(p => new URL(p.url).origin + '/*')
     ])];
     try {
@@ -792,7 +879,7 @@
   $('#testNews')?.addEventListener('click', async () => {
     const box = $('#newsDiag'); box.hidden = false; box.replaceChildren();
     box.append(el('div', 'news-status', 'در حال بررسی…'));
-    const picked = heroPrefs.sources.filter(k => NEWS_FEEDS[k]);
+    const picked = heroPrefs.sources.filter(k => allFeeds()[k]);
     if (!picked.length) { box.replaceChildren(el('div', 'news-status', 'هیچ منبعی انتخاب نشده')); return; }
     const [results, mkt] = await Promise.all([
       Promise.all(picked.map(fetchFeed)),
@@ -821,9 +908,10 @@
     // خواندنِ فید نیاز به دسترسی به همان دامنه دارد و این دسترسی اختیاری است؛
     // فقط وقتی کاربر اخبار را روشن می‌کند از او خواسته می‌شود.
     if (heroPrefs.newsOn && Store.isExt && chrome.permissions) {
-      const origins = heroPrefs.sources
-        .filter(k => NEWS_FEEDS[k])
-        .map(k => new URL(NEWS_FEEDS[k].url).origin + '/*');
+      const feeds = allFeeds();
+      const origins = [...new Set(heroPrefs.sources
+        .filter(k => feeds[k])
+        .map(k => new URL(feeds[k].url).origin + '/*'))];
       if (origins.length) {
         try {
           const granted = await chrome.permissions.request({ origins });
@@ -832,9 +920,11 @@
       }
     }
     if (heroPrefs.quotesOn && Store.isExt && chrome.permissions) {
-      const o = new URL(Kiosk.QUOTE_FEED).origin + '/*';
+      // اجازهٔ همهٔ منبع‌ها یک‌جا گرفته می‌شود تا اگر یکی از کار افتاد،
+      // جایگزینش بدونِ پرسیدنِ دوباره کار کند
+      const o = [...new Set(Kiosk.QUOTE_FEEDS.map(f => new URL(f.url).origin + '/*'))];
       try {
-        const granted = await chrome.permissions.request({ origins: [o] });
+        const granted = await chrome.permissions.request({ origins: o });
         if (!granted) { say('بدون دسترسی، سخن تازه گرفته نمی‌شود'); heroPrefs.quotesOn = false; $('#setQuotesOn').checked = false; }
       } catch (_) { heroPrefs.quotesOn = false; $('#setQuotesOn').checked = false; }
     }
@@ -842,7 +932,8 @@
       clockZones: heroPrefs.zones,
       newsOn: heroPrefs.newsOn,
       newsSources: heroPrefs.sources,
-      quotesOn: heroPrefs.quotesOn
+      quotesOn: heroPrefs.quotesOn,
+      customFeeds
     });
     newsItems = []; newsLoadedAt = 0;   // فید تازه با منابع جدید
     if (st && !st.textContent) say('ذخیره شد ✓');
@@ -4804,36 +4895,48 @@
   let sayingMode = 'all';   // all | poem | quote
   let quoteCache = [];      // نقل‌قول‌های گرفته‌شده از وب (از تنظیمات خوانده می‌شود)
 
-  // گرفتنِ نقل‌قولِ تازه — همان الگوی اخبار و بازار: اختیاری، اجازه‌محور و خودآزما
-  async function fetchQuotes() {
-    const origin = new URL(Kiosk.QUOTE_FEED).origin + '/*';
+  // گرفتنِ نقل‌قولِ تازه — همان الگوی اخبار و بازار: اختیاری، اجازه‌محور و خودآزما.
+  // چند منبع پشتِ سرِ هم امتحان می‌شوند؛ اولی که جواب داد برنده است.
+  async function fetchOneQuoteSource(feed) {
+    const origin = new URL(feed.url).origin + '/*';
     if (Store.isExt && chrome.permissions) {
       try {
         const has = await chrome.permissions.contains({ origins: [origin] });
-        if (!has) return { items: [], error: 'دسترسی به این سایت داده نشده' };
+        if (!has) return { items: [], error: 'دسترسی داده نشده' };
       } catch (_) { /* ادامه بده */ }
     }
     let r;
-    try { r = await fetch(Kiosk.QUOTE_FEED, { cache: 'no-store' }); }
-    catch (_) { return { items: [], error: Store.isExt ? 'سایت پاسخ نداد (شبکه یا فیلترینگ)' : 'در پیش‌نمایش مرورگر ممکن نیست (CORS)' }; }
-    if (!r.ok) return { items: [], error: `سایت خطای ${J.faDigits(r.status)} داد` };
+    try { r = await fetch(feed.url, { cache: 'no-store' }); }
+    catch (_) { return { items: [], error: Store.isExt ? 'پاسخ نداد' : 'در پیش‌نمایش ممکن نیست (CORS)' }; }
+    if (!r.ok) return { items: [], error: `خطای ${J.faDigits(r.status)}` };
     let text = '';
     try { text = await r.text(); } catch (_) { return { items: [], error: 'پاسخ خوانده نشد' }; }
     const items = Kiosk.parseQuotes(text);
-    return items.length ? { items, error: '' } : { items: [], error: 'چیزی که برگشت نقل‌قول نبود' };
+    return items.length ? { items, error: '' } : { items: [], error: 'نقل‌قولی نداشت' };
+  }
+
+  let quoteStatus = [];   // وضعیتِ هر منبع، برای «چرا نشد»
+  async function fetchQuotes() {
+    quoteStatus = [];
+    for (const feed of Kiosk.QUOTE_FEEDS) {
+      const r = await fetchOneQuoteSource(feed);
+      quoteStatus.push({ name: feed.name, count: r.items.length, error: r.error });
+      if (r.items.length) return { items: r.items, source: feed.name, error: '' };
+    }
+    return { items: [], source: '', error: quoteStatus.map(x => `${x.name}: ${x.error}`).join(' · ') };
   }
 
   async function refreshQuotes(silent) {
     const s = await Store.getSettings();
     if (!s.quotesOn) return;
-    const { items, error } = await fetchQuotes();
-    if (error) { if (!silent) toast('تازه‌سازی نشد — ' + error); return; }
+    const { items, source, error } = await fetchQuotes();
+    if (error) { if (!silent) toast('هیچ منبعی جواب نداد — ' + error); return; }
     const have = new Set((s.quotesCache || []).map(q => q.lines[0].toLowerCase()));
     const fresh = items.filter(q => !have.has(q.lines[0].toLowerCase()));
     const merged = Kiosk.trimQuotes([...(s.quotesCache || []), ...fresh]);
     await Store.saveSettings({ quotesCache: merged, quotesFetchedAt: Date.now() });
     quoteCache = merged;
-    if (!silent) toast(fresh.length ? `${J.faDigits(fresh.length)} سخن تازه اضافه شد` : 'چیز تازه‌ای نبود');
+    if (!silent) toast(fresh.length ? `${J.faDigits(fresh.length)} سخن تازه از ${source}` : `${source} چیز تازه‌ای نداشت`);
     renderKiosk();
   }
 

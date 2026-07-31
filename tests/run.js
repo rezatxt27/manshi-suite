@@ -1606,6 +1606,60 @@ t('peopleFiles گروه‌بندی درست', () => {
     });
     t('نقل‌قول وب: آدرسِ فید https است', () => assert.ok(/^https:\/\//.test(K.QUOTE_FEED)));
 
+    // ── منبعِ خبرِ دستی ──
+    t('منبع دستی: فقط https پذیرفته می‌شود', () => {
+      assert.ok(K.normalizeFeed({ url: 'http://x.com/feed' }).error);
+      assert.ok(K.normalizeFeed({ url: 'ftp://x.com/feed' }).error);
+      assert.ok(K.normalizeFeed({ url: 'javascript:alert(1)' }).error);
+      assert.ok(K.normalizeFeed({ url: 'https://x.com/feed' }).feed);
+    });
+    t('منبع دستی: آدرسِ خراب یا خالی رد می‌شود', () => {
+      assert.ok(K.normalizeFeed({ url: '' }).error);
+      assert.ok(K.normalizeFeed({ url: 'یک چیزی' }).error);
+      assert.ok(K.normalizeFeed(null).error);
+    });
+    t('منبع دستی: بی‌نام، نامِ دامنه را می‌گیرد', () =>
+      assert.strictEqual(K.normalizeFeed({ url: 'https://www.varzesh3.com/rss/all' }).feed.name, 'varzesh3.com'));
+    t('منبع دستی: نامِ بلند بریده می‌شود', () =>
+      assert.ok(K.normalizeFeed({ url: 'https://x.com/f', name: 'ن'.repeat(200) }).feed.name.length <= 40));
+    t('منبع دستی: دستهٔ نامعتبر به «عمومی» می‌افتد', () => {
+      assert.strictEqual(K.normalizeFeed({ url: 'https://x.com/f', cat: '<script>' }).feed.cat, 'عمومی');
+      assert.strictEqual(K.normalizeFeed({ url: 'https://x.com/f', cat: 'ورزشی' }).feed.cat, 'ورزشی');
+    });
+    t('منبع دستی: آدرسِ تکراری اضافه نمی‌شود', () => {
+      const have = [K.normalizeFeed({ url: 'https://x.com/feed' }).feed];
+      assert.ok(K.normalizeFeed({ url: 'https://x.com/feed' }, have).error);
+    });
+    t('منبع دستی: سقفِ تعداد رعایت می‌شود', () => {
+      const many = Array.from({ length: K.MAX_CUSTOM_FEEDS }, (_, i) =>
+        K.normalizeFeed({ url: `https://s${i}.com/feed` }).feed);
+      assert.ok(K.normalizeFeed({ url: 'https://new.com/feed' }, many).error);
+    });
+    t('منبع دستی: هر منبع شناسهٔ یکتا می‌گیرد', () => {
+      const a = K.normalizeFeed({ url: 'https://a.com/f' }).feed;
+      const b = K.normalizeFeed({ url: 'https://b.com/f' }).feed;
+      assert.notStrictEqual(a.id, b.id);
+      assert.ok(a.custom && b.custom);
+    });
+    t('منبع دستی: ویرایشِ خودش تکراری حساب نمی‌شود', () => {
+      const f = K.normalizeFeed({ url: 'https://x.com/feed' }).feed;
+      assert.ok(K.normalizeFeed({ id: f.id, url: 'https://x.com/feed', name: 'تازه' }, [f]).feed);
+    });
+
+    // ── منبع‌های نقل‌قول ──
+    t('نقل‌قول: چند منبع برای جایگزینی هست', () => {
+      assert.ok(K.QUOTE_FEEDS.length >= 3);
+      assert.ok(K.QUOTE_FEEDS.every(f => /^https:\/\//.test(f.url) && f.name && f.id));
+      assert.strictEqual(new Set(K.QUOTE_FEEDS.map(f => f.id)).size, K.QUOTE_FEEDS.length);
+    });
+    t('نقل‌قول: هر سه شکلِ پاسخ خوانده می‌شود', () => {
+      const zen = K.parseQuotes('[{"q":"A thoughtful line about work.","a":"Ann"}]');
+      const dj  = K.parseQuotes('{"quotes":[{"quote":"A thoughtful line about work.","author":"Bob"}]}');
+      const tf  = K.parseQuotes('[{"text":"A thoughtful line about work.","author":"Cid"}]');
+      assert.deepStrictEqual([zen.length, dj.length, tf.length], [1, 1, 1]);
+      assert.deepStrictEqual([zen[0].poet, dj[0].poet, tf[0].poet], ['Ann', 'Bob', 'Cid']);
+    });
+
     // ── تایمر تمرکز ──
     const T0 = new Date(2026, 6, 28, 10, 0, 0);
     const at = (min, sec = 0) => new Date(T0.getTime() + min * 60000 + sec * 1000);
