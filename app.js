@@ -525,6 +525,7 @@
 
   // ساعتِ تیم + آب‌وهوا (H۷)
   let clockTimer = null, weatherTxt = '';
+  let weatherOn = false;   // تا کاربر روشنش نکند، به open-meteo وصل نمی‌شویم
   // ساعتِ شهرهای دیگر فقط برای کسی که با آن‌ها کار می‌کند ارزش دارد؛ پیش‌فرض
   // فقط ساعتِ خودِ کاربر است و بقیه در تنظیمات انتخاب می‌شوند.
   const CLOCK_CHOICES = [
@@ -556,7 +557,7 @@
   function startClocks() {
     drawClocks();
     clearInterval(clockTimer); clockTimer = setInterval(drawClocks, 30000);
-    if (!weatherTxt) loadWeather();
+    if (!weatherTxt && weatherOn) loadWeather();
   }
   // ── اخبار فناوری ─────────────────────────────────────
   // تنها بخشی از منشی که به سایتِ بیرونی وصل می‌شود، پس پیش‌فرض خاموش است.
@@ -719,15 +720,21 @@
   }
 
   // ── فرمِ سربرگ: شهرهای ساعت + کارت اخبار ──
-  let heroPrefs = { zones: [], newsOn: false, sources: [], quotesOn: false };
+  let heroPrefs = { zones: [], newsOn: false, sources: [], quotesOn: false, weatherOn: false, updateCheckOn: true };
 
   function paintHeroPrefs(s) {
     heroPrefs = {
       zones: [...(s.clockZones || [])],
       newsOn: !!s.newsOn,
       sources: [...(s.newsSources || [])],
-      quotesOn: !!s.quotesOn
+      quotesOn: !!s.quotesOn,
+      weatherOn: !!s.weatherOn,
+      updateCheckOn: s.updateCheckOn !== false
     };
+    const uc = $('#setUpdateCheck');
+    if (uc) { uc.checked = heroPrefs.updateCheckOn; uc.onchange = () => { heroPrefs.updateCheckOn = uc.checked; }; }
+    const wc = $('#setWeatherOn');
+    if (wc) { wc.checked = heroPrefs.weatherOn; wc.onchange = () => { heroPrefs.weatherOn = wc.checked; }; }
     customFeeds = [...(s.customFeeds || [])];
     renderCustomFeeds();
     const qc = $('#setQuotesOn');
@@ -4565,6 +4572,8 @@
     renderFollowups(tasks);
     renderTasksView();
     renderDayEnd(tasks, settings);
+    weatherOn = !!settings.weatherOn;
+    if (!weatherOn) weatherTxt = '';
     clockZones = (settings.clockZones || []).map(tz => {
       const found = CLOCK_CHOICES.find(c => c[1] === tz);
       return found || null;
@@ -5237,6 +5246,7 @@
   // یک بار در روز، بی‌سروصدا؛ خطایش هیچ‌جا دیده نمی‌شود
   async function checkUpdateQuietly() {
     const s = await Store.getSettings();
+    if (!s.updateCheckOn) { $('#updateBanner').hidden = true; return; }
     if (!Updater.dueForCheck(s.updateCheckedAt)) { await paintUpdateBanner(s.lastRelease, s); return; }
     const { rel } = await fetchRelease();
     await Store.saveSettings({ updateCheckedAt: Date.now(), ...(rel ? { lastRelease: rel } : {}) });

@@ -40,12 +40,14 @@ const Store = (() => {
     newsSources: ['zoomit', 'digiato'],
     kioskCards: ['calendar', 'beyt'],  // کارت‌های روشنِ صفحهٔ کیوسک
     prayerCity: 'تهران',               // مبنای محاسبهٔ اوقات شرعی (آفلاین)
+    weatherOn: false,                  // دمای تهران در سربرگ — درخواست بیرونی، پس پیش‌فرض خاموش
     quotesOn: false,                   // گرفتن نقل‌قول تازه از اینترنت — پیش‌فرض خاموش
     quotesCache: [],                   // نقل‌قول‌های گرفته‌شده، محلی ذخیره می‌مانند
     quotesFetchedAt: 0,
     focusSession: null,                // تایمر تمرکزِ در جریان
     focusLog: null,                    // { day, rounds, minutes } — جمعِ امروز
     customFeeds: [],                   // منبع‌های خبرِ دستیِ کاربر
+    updateCheckOn: true,               // تنها درخواستی که پیش‌فرض روشن است — قابل خاموش‌کردن
     updateCheckedAt: 0,                // آخرین باری که نسخه بررسی شد
     updateSeen: '',                    // نسخه‌ای که کاربر بنرش را بسته
     lastRelease: null,                 // آخرین ریلیزِ دیده‌شده
