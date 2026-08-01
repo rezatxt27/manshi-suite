@@ -6,6 +6,8 @@
 > A Persian, RTL Chrome extension (MV3) for meeting minutes, task management and daily planning.
 > Local-first: no backend, no telemetry, bring-your-own AI key.
 
+[![تست و ریلیز](https://github.com/rezatxt27/manshi-suite/actions/workflows/release.yml/badge.svg)](https://github.com/rezatxt27/manshi-suite/actions/workflows/release.yml)
+
 ---
 
 ## چه می‌کند
@@ -102,6 +104,19 @@ OpenAI · Gemini · Grok · DeepSeek · OpenRouter · GapGPT · هر سرویس�
 ## مشارکت
 
 اگر باگی دیدید یا آدرسِ فیدی از کار افتاد، Issue باز کنید. برای تغییر کد، لطفاً `node tests/run.js` را قبل از PR اجرا کنید.
+
+## انتشار نسخهٔ تازه
+
+ریلیز خودکار است. تنها کارِ لازم:
+
+1. شمارهٔ نسخه را در `manifest.json` بالا ببر
+2. بخشِ همان نسخه را به بالای `CHANGELOG.md` اضافه کن
+3. پوش کن
+
+بعدش خودِ گیت‌هاب: تست‌ها را می‌گیرد، و اگر پاس شدند تگ `v<نسخه>` و ریلیز را با متنِ همان بخشِ CHANGELOG می‌سازد.
+اگر تستی بشکند ریلیزی ساخته نمی‌شود. اگر ریلیزِ آن نسخه از قبل باشد، دوباره ساخته نمی‌شود.
+
+جزئیات در [.github/workflows/release.yml](.github/workflows/release.yml).
 
 ## پروانه
 

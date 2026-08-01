@@ -1,0 +1,73 @@
+# با هر پوش به main نسخهٔ manifest.json را می‌بیند؛ اگر ریلیزش نبود، تست می‌گیرد و می‌سازد.
+name: تست و ریلیز خودکار
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:        # اجرای دستی از تبِ Actions
+
+permissions:
+  contents: write           # برای ساختن تگ و ریلیز
+
+jobs:
+  test:
+    name: تست‌ها
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: اجرای تست‌ها
+        run: node tests/run.js
+
+  release:
+    name: ریلیز
+    needs: test                                   # تستِ شکست‌خورده = بدون ریلیز
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0                          # تگ‌ها هم لازم‌اند
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: خواندن نسخه از manifest
+        id: v
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION"    >> "$GITHUB_OUTPUT"
+          echo "نسخهٔ فعلی: $VERSION"
+
+      - name: آیا این نسخه از قبل ریلیز شده؟
+        id: check
+        run: |
+          if gh release view "${{ steps.v.outputs.tag }}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "‏${{ steps.v.outputs.tag }} از قبل هست — کاری لازم نیست."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "‏${{ steps.v.outputs.tag }} تازه است — ساخته می‌شود."
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: درآوردن یادداشت نسخه از CHANGELOG
+        if: steps.check.outputs.exists == 'false'
+        run: node .github/scripts/release-notes.js "${{ steps.v.outputs.version }}" > /tmp/notes.md
+
+      - name: ساخت ریلیز
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          gh release create "${{ steps.v.outputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "منشی ${{ steps.v.outputs.version }}" \
+            --notes-file /tmp/notes.md \
+            --target "$GITHUB_SHA"
+        env:
+          GH_TOKEN: ${{ github.token }}
