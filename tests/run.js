@@ -1660,6 +1660,68 @@ t('peopleFiles گروه‌بندی درست', () => {
       assert.deepStrictEqual([zen[0].poet, dj[0].poet, tf[0].poet], ['Ann', 'Bob', 'Cid']);
     });
 
+    // ── آب‌وهوا ──
+    const wxCities = ['تهران', 'مشهد', 'رشت'].map(n => K.cityByName(n));
+    const WX = JSON.stringify([
+      { current: { temperature_2m: 34.2, relative_humidity_2m: 18, weather_code: 0, wind_speed_10m: 11 },
+        daily: { temperature_2m_max: [38], temperature_2m_min: [24] } },
+      { current: { temperature_2m: 29.8, relative_humidity_2m: 31, weather_code: 2, wind_speed_10m: 7 },
+        daily: { temperature_2m_max: [33], temperature_2m_min: [19] } },
+      { current: { temperature_2m: 21.4, relative_humidity_2m: 72, weather_code: 61, wind_speed_10m: 15 },
+        daily: { temperature_2m_max: [24], temperature_2m_min: [17] } }
+    ]);
+    t('هوا: چند شهر در یک درخواست خوانده می‌شود', () => {
+      const out = K.parseWeather(WX, wxCities);
+      assert.strictEqual(out.length, 3);
+      assert.deepStrictEqual(out.map(w => w.city), ['تهران', 'مشهد', 'رشت']);
+    });
+    t('هوا: شهرها با ترتیبِ درست به داده می‌چسبند', () => {
+      const out = K.parseWeather(WX, wxCities);
+      assert.strictEqual(out[0].temp, 34);
+      assert.strictEqual(out[2].temp, 21);
+      assert.strictEqual(out[2].city, 'رشت', 'ردیفِ سوم نباید جابه‌جا شود');
+    });
+    t('هوا: کدِ WMO به فارسی ترجمه می‌شود', () => {
+      const out = K.parseWeather(WX, wxCities);
+      assert.strictEqual(out[0].text, 'آفتابی');
+      assert.strictEqual(out[1].text, 'کمی ابری');
+      assert.strictEqual(out[2].text, 'باران');
+      assert.strictEqual(K.weatherLabel(75).text, 'برف');
+      assert.strictEqual(K.weatherLabel(99).text, 'رعدوبرق');
+      assert.strictEqual(K.weatherLabel(-1).text, '—', 'کدِ ناشناس صفحه را نمی‌شکند');
+    });
+    t('هوا: بیشینه/کمینه و رطوبت و باد خوانده می‌شوند', () => {
+      const w = K.parseWeather(WX, wxCities)[0];
+      assert.deepStrictEqual([w.max, w.min, w.humidity, w.wind], [38, 24, 18, 11]);
+    });
+    // پاسخِ یک‌شهری شیء است نه آرایه — این تفاوت در عمل صفحه را می‌شکست
+    t('هوا: پاسخِ تک‌شهری (شیء) هم خوانده می‌شود', () => {
+      const out = K.parseWeather(JSON.stringify({ current: { temperature_2m: 30, weather_code: 3 }, daily: {} }), [K.cityByName('تهران')]);
+      assert.strictEqual(out.length, 1);
+      assert.strictEqual(out[0].text, 'ابری');
+      assert.strictEqual(out[0].max, null, 'نبودِ پیش‌بینی نباید NaN بدهد');
+    });
+    t('هوا: پاسخِ خراب هیچ ردیفی نمی‌دهد', () => {
+      for (const bad of ['', 'نه JSON', '{}', 'null', '[]', JSON.stringify([{ current: null }]), JSON.stringify([{ current: { temperature_2m: 'گرم' } }])])
+        assert.deepStrictEqual(K.parseWeather(bad, wxCities), [], String(bad).slice(0, 12));
+    });
+    t('هوا: آدرس https است و همهٔ شهرها را دارد', () => {
+      const u = K.weatherUrl(wxCities);
+      assert.ok(u.startsWith('https://api.open-meteo.com/'));
+      assert.ok(u.includes('35.6892') && u.includes('36.2605') && u.includes('37.2808'));
+      assert.ok(!/key|token|email/i.test(u), 'هیچ کلید یا شناسه‌ای در آدرس نباشد');
+    });
+    t('هوا: بدون شهر، آدرسی ساخته نمی‌شود', () => {
+      assert.strictEqual(K.weatherUrl([]), '');
+      assert.strictEqual(K.weatherUrl(null), '');
+    });
+    t('هوا: تازه‌سازی نیم‌ساعت یک بار', () => {
+      const now = Date.now();
+      assert.ok(K.weatherDue(0, now));
+      assert.ok(!K.weatherDue(now - 60e3, now));
+      assert.ok(K.weatherDue(now - 31 * 60e3, now));
+    });
+
     // ── تایمر تمرکز ──
     const T0 = new Date(2026, 6, 28, 10, 0, 0);
     const at = (min, sec = 0) => new Date(T0.getTime() + min * 60000 + sec * 1000);

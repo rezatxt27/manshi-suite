@@ -354,6 +354,67 @@ const Kiosk = (() => {
     };
   }
 
+  // ── آب‌وهوا ─────────────────────────────────────────
+  // open-meteo رایگان است، کلید نمی‌خواهد و چند شهر را در یک درخواست می‌دهد.
+  // هیچ دادهٔ کاربر نمی‌رود — فقط مختصاتِ ثابتِ شهرها.
+  const WEATHER_API = 'https://api.open-meteo.com/v1/forecast';
+  const WEATHER_REFRESH_MS = 30 * 60 * 1000;
+
+  // کدهای WMO → متنِ فارسی و نشانه
+  const WMO = [
+    [[0], 'آفتابی', 'sun'],
+    [[1, 2], 'کمی ابری', 'cloud-sun'],
+    [[3], 'ابری', 'cloud'],
+    [[45, 48], 'مه', 'fog'],
+    [[51, 53, 55, 56, 57], 'نم‌نم باران', 'drizzle'],
+    [[61, 63, 65, 66, 67, 80, 81, 82], 'باران', 'rain'],
+    [[71, 73, 75, 77, 85, 86], 'برف', 'snow'],
+    [[95, 96, 99], 'رعدوبرق', 'storm']
+  ];
+  function weatherLabel(code) {
+    for (const [codes, text, icon] of WMO) if (codes.includes(code)) return { text, icon };
+    return { text: '—', icon: 'cloud' };
+  }
+
+  // آدرسِ یک درخواست برای همهٔ شهرها
+  function weatherUrl(cities) {
+    const list = (cities || []).filter(Boolean);
+    if (!list.length) return '';
+    const lat = list.map(c => c[1]).join(','), lon = list.map(c => c[2]).join(',');
+    return `${WEATHER_API}?latitude=${lat}&longitude=${lon}`
+      + '&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m'
+      + '&daily=temperature_2m_max,temperature_2m_min'
+      + '&timezone=auto&forecast_days=1';
+  }
+
+  // پاسخ برای یک شهر شیء است و برای چند شهر آرایه — هر دو را یکسان می‌کند
+  function parseWeather(raw, cities) {
+    let d = raw;
+    if (typeof raw === 'string') { try { d = JSON.parse(raw); } catch (_) { return []; } }
+    const rows = Array.isArray(d) ? d : (d && typeof d === 'object' ? [d] : []);
+    const out = [];
+    rows.forEach((r, i) => {
+      const city = (cities || [])[i];
+      const cur = r && r.current;
+      if (!city || !cur || typeof cur.temperature_2m !== 'number') return;
+      const day = r.daily || {};
+      const pick = (a) => Array.isArray(a) && typeof a[0] === 'number' ? Math.round(a[0]) : null;
+      out.push({
+        city: city[0],
+        temp: Math.round(cur.temperature_2m),
+        code: typeof cur.weather_code === 'number' ? cur.weather_code : -1,
+        humidity: typeof cur.relative_humidity_2m === 'number' ? Math.round(cur.relative_humidity_2m) : null,
+        wind: typeof cur.wind_speed_10m === 'number' ? Math.round(cur.wind_speed_10m) : null,
+        max: pick(day.temperature_2m_max),
+        min: pick(day.temperature_2m_min),
+        ...weatherLabel(typeof cur.weather_code === 'number' ? cur.weather_code : -1)
+      });
+    });
+    return out;
+  }
+
+  const weatherDue = (at, now = Date.now()) => !at || (now - at) >= WEATHER_REFRESH_MS;
+
   // ── تایمر تمرکز ─────────────────────────────────────
   // زمانِ باقی‌مانده از ساعتِ دیوار حساب می‌شود، نه از شمارشِ داخلی؛ پس اگر تب
   // بسته یا کند شود (مرورگر تایمرِ تبِ پنهان را throttle می‌کند) عدد درست می‌ماند.
@@ -440,6 +501,7 @@ const Kiosk = (() => {
     sayingOfDay, randomSaying, filterSayings, allSayings, parseQuotes, trimQuotes,
     SAYINGS, POETS, QUOTE_FEED, QUOTE_FEEDS, MAX_FETCHED, QUOTE_REFRESH_MS,
     FOCUS, focusState, nextSession, startSession, workedMinutes, todayFocus, addFocus, clock,
+    WEATHER_API, WEATHER_REFRESH_MS, weatherLabel, weatherUrl, parseWeather, weatherDue,
     FEED_CATS, MAX_CUSTOM_FEEDS, normalizeFeed
   };
   if (typeof globalThis !== 'undefined') globalThis.Kiosk = api;

@@ -526,6 +526,7 @@
   // ساعتِ تیم + آب‌وهوا (H۷)
   let clockTimer = null, weatherTxt = '';
   let weatherOn = false;   // تا کاربر روشنش نکند، به open-meteo وصل نمی‌شویم
+  let weatherCities = ['تهران'];
   // ساعتِ شهرهای دیگر فقط برای کسی که با آن‌ها کار می‌کند ارزش دارد؛ پیش‌فرض
   // فقط ساعتِ خودِ کاربر است و بقیه در تنظیمات انتخاب می‌شوند.
   const CLOCK_CHOICES = [
@@ -550,14 +551,14 @@
     }
     if (weatherTxt) {
       const w = el('div', 'clock clock-weather');
-      w.append(el('span', 'clock-time', weatherTxt), el('span', 'clock-label', 'تهران'));
+      w.append(el('span', 'clock-time', weatherTxt), el('span', 'clock-label', weatherRows[0]?.city || weatherCities[0] || 'تهران'));
       box.append(w);
     }
   }
   function startClocks() {
     drawClocks();
     clearInterval(clockTimer); clockTimer = setInterval(drawClocks, 30000);
-    if (!weatherTxt && weatherOn) loadWeather();
+    if (weatherOn && Kiosk.weatherDue(weatherAt)) loadWeather(weatherCities);
   }
   // ── اخبار فناوری ─────────────────────────────────────
   // تنها بخشی از منشی که به سایتِ بیرونی وصل می‌شود، پس پیش‌فرض خاموش است.
@@ -729,6 +730,8 @@
       sources: [...(s.newsSources || [])],
       quotesOn: !!s.quotesOn,
       weatherOn: !!s.weatherOn,
+      // بدون این، ذخیرهٔ تنظیمات شهرهای انتخابی را پاک می‌کرد
+      weatherCities: [...((s.weatherCities || []).length ? s.weatherCities : ['تهران'])],
       updateCheckOn: s.updateCheckOn !== false
     };
     const uc = $('#setUpdateCheck');
@@ -937,27 +940,56 @@
         if (!granted) { say('بدون دسترسی، سخن تازه گرفته نمی‌شود'); heroPrefs.quotesOn = false; $('#setQuotesOn').checked = false; }
       } catch (_) { heroPrefs.quotesOn = false; $('#setQuotesOn').checked = false; }
     }
+    // آب‌وهوا هم به دسترسیِ همان دامنه نیاز دارد
+    if (heroPrefs.weatherOn && Store.isExt && chrome.permissions) {
+      const o = new URL(WEATHER_API).origin + '/*';
+      try {
+        const granted = await chrome.permissions.request({ origins: [o] });
+        if (!granted) { say('بدون دسترسی، آب‌وهوا خوانده نمی‌شود'); heroPrefs.weatherOn = false; $('#setWeatherOn').checked = false; }
+      } catch (_) { heroPrefs.weatherOn = false; $('#setWeatherOn').checked = false; }
+    }
     await Store.saveSettings({
       clockZones: heroPrefs.zones,
       newsOn: heroPrefs.newsOn,
       newsSources: heroPrefs.sources,
       quotesOn: heroPrefs.quotesOn,
+      weatherOn: heroPrefs.weatherOn,
+      weatherCities: heroPrefs.weatherCities,
+      updateCheckOn: heroPrefs.updateCheckOn,
       customFeeds
     });
+    weatherRows = []; weatherAt = 0;    // با شهرهای تازه دوباره خوانده شود
     newsItems = []; newsLoadedAt = 0;   // فید تازه با منابع جدید
     if (st && !st.textContent) say('ذخیره شد ✓');
     await renderAll();
     startClocks();
   });
 
-  async function loadWeather() {
+  const WEATHER_API = Kiosk.WEATHER_API;
+  let weatherRows = [], weatherAt = 0, weatherErr = '';
+
+  // یک درخواست برای همهٔ شهرها؛ هیچ دادهٔ کاربر نمی‌رود، فقط مختصاتِ ثابت
+  async function loadWeather(cityNames) {
+    const cities = (cityNames || ['تهران']).map(n => Kiosk.cityByName(n));
+    const url = Kiosk.weatherUrl(cities);
+    if (!url) return;
+    if (Store.isExt && chrome.permissions) {
+      try {
+        const has = await chrome.permissions.contains({ origins: [new URL(WEATHER_API).origin + '/*'] });
+        if (!has) { weatherErr = 'دسترسی داده نشده'; return; }
+      } catch (_) { /* ادامه بده */ }
+    }
     try {
-      const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=35.7&longitude=51.4&current=temperature_2m', { cache: 'no-store' });
-      const j = await r.json();
-      const t = j && j.current && Math.round(j.current.temperature_2m);
-      if (typeof t === 'number' && !isNaN(t)) { weatherTxt = J.faDigits(t) + '°'; drawClocks(); }
-    } catch (_) { /* بی‌سروصدا */ }
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) { weatherErr = `خطای ${J.faDigits(r.status)}`; return; }
+      weatherRows = Kiosk.parseWeather(await r.text(), cities);
+      weatherErr = weatherRows.length ? '' : 'پاسخ خوانده نشد';
+      weatherAt = Date.now();
+      weatherTxt = weatherRows[0] ? J.faDigits(weatherRows[0].temp) + '°' : '';
+      drawClocks();
+    } catch (_) { weatherErr = Store.isExt ? 'سرویس پاسخ نداد' : 'در پیش‌نمایش ممکن نیست (CORS)'; }
   }
+
 
   // برچسب‌های موجود روی کارهای بازِ من → ردیف فیلتر
   function renderTodoTags(tasks) {
@@ -4573,7 +4605,8 @@
     renderTasksView();
     renderDayEnd(tasks, settings);
     weatherOn = !!settings.weatherOn;
-    if (!weatherOn) weatherTxt = '';
+    weatherCities = (settings.weatherCities || []).length ? settings.weatherCities : ['تهران'];
+    if (!weatherOn) { weatherTxt = ''; weatherRows = []; }
     clockZones = (settings.clockZones || []).map(tz => {
       const found = CLOCK_CHOICES.find(c => c[1] === tz);
       return found || null;
@@ -4587,6 +4620,7 @@
   const KIOSK_CARDS = [
     ['calendar', 'تقویم و مناسبت‌ها', 'شمارش معکوس و مناسبت‌های پیشِ رو — آفلاین'],
     ['prayer', 'اوقات شرعی', 'روی همین دستگاه حساب می‌شود — آفلاین'],
+    ['weather', 'آب‌وهوا', 'دما و وضعیت چند شهر — به سایت بیرونی وصل می‌شود'],
     ['focus', 'تایمر تمرکز', 'دورِ ۲۵ دقیقه‌ای روی یک کار — زمانش روی همان کار ثبت می‌شود'],
     ['beyt', 'سخن روز', 'شعر فارسی و نقل‌قولِ آدم‌های بزرگ — آفلاین، با امکان تازه‌سازی'],
     ['market', 'بازار', 'دلار، طلا و سکه — به سایت بیرونی وصل می‌شود'],
@@ -4904,6 +4938,75 @@
     return card;
   }
 
+  // ── کارت آب‌وهوا ────────────────────────────────────
+  const WX_SVG = {
+    sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M4.2 12H2M22 12h-2.2M6.3 6.3 4.8 4.8M19.2 19.2l-1.5-1.5M17.7 6.3l1.5-1.5M4.8 19.2l1.5-1.5"/></svg>',
+    'cloud-sun': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="8.5" cy="7.5" r="3"/><path d="M8.5 2.4v1.6M3.4 7.5H2M12.6 7.5H14M4.9 3.9 3.9 2.9M13.1 3.9l1-1"/><path d="M17.5 20.5H8a3.8 3.8 0 0 1 .4-7.6 5 5 0 0 1 9.3 1.4 3.1 3.1 0 0 1-.2 6.2Z"/></svg>',
+    cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M17.5 19.5H7a4.3 4.3 0 0 1 .5-8.6 5.6 5.6 0 0 1 10.5 1.6 3.5 3.5 0 0 1-.5 7Z"/></svg>',
+    fog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 9h16M6 13h12M4 17h16"/></svg>',
+    drizzle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M17.5 15.5H7a4.3 4.3 0 0 1 .5-8.6 5.6 5.6 0 0 1 10.5 1.6 3.5 3.5 0 0 1-.5 7Z"/><path d="M9 19v1.5M13 19v1.5M17 19v1.5"/></svg>',
+    rain: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M17.5 14.5H7a4.3 4.3 0 0 1 .5-8.6 5.6 5.6 0 0 1 10.5 1.6 3.5 3.5 0 0 1-.5 7Z"/><path d="M9 18l-1 3M13 18l-1 3M17 18l-1 3"/></svg>',
+    snow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M17.5 14.5H7a4.3 4.3 0 0 1 .5-8.6 5.6 5.6 0 0 1 10.5 1.6 3.5 3.5 0 0 1-.5 7Z"/><path d="M9 19h.01M13 19h.01M17 19h.01M11 21.5h.01M15 21.5h.01"/></svg>',
+    storm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 13.5H7A4.3 4.3 0 0 1 7.5 5a5.6 5.6 0 0 1 10.5 1.6 3.5 3.5 0 0 1-.5 7Z"/><path d="M13 15l-3 4h3l-1.5 3.5"/></svg>'
+  };
+
+  function buildWeatherCard(settings) {
+    const card = kioskCard('آب‌وهوا', weatherAt ? `تازه‌سازی ${J.faDigits(hhmm(new Date(weatherAt)))}` : '');
+    card.classList.add('tint-blue');
+
+    if (!weatherRows.length) {
+      const e = el('div', 'kiosk-empty');
+      e.append(document.createTextNode(weatherErr || 'هنوز خوانده نشده'));
+      const b = el('button', 'btn btn-ghost btn-sm', 'تلاش دوباره');
+      b.addEventListener('click', async () => { weatherAt = 0; await loadWeather(weatherCities); renderKiosk(); });
+      e.append(b);
+      card.append(e);
+    } else {
+      const list = el('div', 'wx-list');
+      for (const w of weatherRows) {
+        const row = el('div', 'wx-row');
+        const ic = el('span', 'wx-ic'); ic.innerHTML = WX_SVG[w.icon] || WX_SVG.cloud;
+        row.append(ic);
+        const body = el('div', 'wx-body');
+        body.append(el('span', 'wx-city', w.city));
+        const sub = el('span', 'wx-sub', w.text);
+        if (w.max != null && w.min != null) sub.append(document.createTextNode(` · ${J.faDigits(w.max)}° / ${J.faDigits(w.min)}°`));
+        body.append(sub);
+        row.append(body);
+        const t = el('span', 'wx-temp', `${J.faDigits(w.temp)}°`);
+        if (w.humidity != null) t.title = `رطوبت ${J.faDigits(w.humidity)}٪` + (w.wind != null ? ` · باد ${J.faDigits(w.wind)} کیلومتر بر ساعت` : '');
+        row.append(t);
+        list.append(row);
+      }
+      card.append(list);
+    }
+
+    // انتخاب شهرها — همین‌جا، بدون رفتن به تنظیمات
+    const pick = el('details', 'wx-pick');
+    pick.append(el('summary', 'wx-pick-sum', `شهرها (${J.faDigits(weatherCities.length)})`));
+    const grid = el('div', 'zone-picker');
+    for (const [name] of Kiosk.CITIES) {
+      const b = el('button', 'zone-chip' + (weatherCities.includes(name) ? ' is-on' : ''), name);
+      b.type = 'button';
+      b.addEventListener('click', async () => {
+        const next = weatherCities.includes(name)
+          ? weatherCities.filter(x => x !== name)
+          : [...weatherCities, name];
+        if (!next.length) { toast('حداقل یک شهر لازم است'); return; }
+        if (next.length > 6) { toast('حداکثر ۶ شهر'); return; }
+        await Store.saveSettings({ weatherCities: next });
+        weatherCities = next; weatherAt = 0;
+        await loadWeather(next);
+        renderKiosk();
+      });
+      grid.append(b);
+    }
+    pick.append(grid);
+    card.append(pick);
+    card.append(el('p', 'kiosk-note', 'از open-meteo.com — رایگان و بدون کلید. فقط مختصاتِ شهرها فرستاده می‌شود، هیچ دادهٔ تو.'));
+    return card;
+  }
+
   let sayingMode = 'all';   // all | poem | quote
   let quoteCache = [];      // نقل‌قول‌های گرفته‌شده از وب (از تنظیمات خوانده می‌شود)
 
@@ -5154,6 +5257,10 @@
     }
     // تایمر اول می‌آید — وقتی در جریان است، مهم‌ترین چیزِ صفحه است
     if (on.includes('focus')) grid.append(buildFocusCard(settings, await Store.getTasks()));
+    if (on.includes('weather')) {
+      if (settings.weatherOn && Kiosk.weatherDue(weatherAt)) await loadWeather(weatherCities);
+      grid.append(buildWeatherCard(settings));
+    }
     if (on.includes('calendar')) grid.append(buildCalendarCard(now));
     if (on.includes('prayer')) grid.append(buildPrayerCard(now, settings.prayerCity));
     if (on.includes('beyt')) grid.append(buildSayingCard(now, settings));

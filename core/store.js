@@ -40,7 +40,8 @@ const Store = (() => {
     newsSources: ['zoomit', 'digiato'],
     kioskCards: ['calendar', 'beyt'],  // کارت‌های روشنِ صفحهٔ کیوسک
     prayerCity: 'تهران',               // مبنای محاسبهٔ اوقات شرعی (آفلاین)
-    weatherOn: false,                  // دمای تهران در سربرگ — درخواست بیرونی، پس پیش‌فرض خاموش
+    weatherOn: false,                  // آب‌وهوا — درخواست بیرونی، پس پیش‌فرض خاموش
+    weatherCities: ['تهران'],          // شهرهایی که آب‌وهوایشان دیده می‌شود
     quotesOn: false,                   // گرفتن نقل‌قول تازه از اینترنت — پیش‌فرض خاموش
     quotesCache: [],                   // نقل‌قول‌های گرفته‌شده، محلی ذخیره می‌مانند
     quotesFetchedAt: 0,
