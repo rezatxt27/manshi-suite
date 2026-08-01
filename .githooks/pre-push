@@ -1,0 +1,3 @@
+#!/bin/sh
+# جلوی پوشِ دادهٔ حساس را می‌گیرد. برای رد کردن (فقط اگر مطمئنی): git push --no-verify
+exec sh "$(git rev-parse --show-toplevel)/.github/scripts/security-check.sh"
