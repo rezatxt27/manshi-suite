@@ -3,6 +3,7 @@
 const Store = (() => {
   const J = typeof Jalali !== 'undefined' ? Jalali : require('./jalali.js');
   const DP = typeof DateParser !== 'undefined' ? DateParser : require('./date-parser.js');
+  const SRCH = typeof MeetSearch !== 'undefined' ? MeetSearch : require('./search.js');
   const isExt = typeof chrome !== 'undefined' && !!(chrome.storage && chrome.storage.local);
   const newId = () => 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const SECRET_KEYS = ['icsUrl', 'aiKey'];
@@ -29,7 +30,7 @@ const Store = (() => {
     aiProfiles: [],        // [{ id, name, provider, baseUrl, key, model }] — چند اتصال هوش مصنوعی
     activeAiId: '',        // شناسهٔ پروفایل فعال
     aiBaseUrl: '', aiKey: '', aiModel: '', // میراث تک‌اتصالی؛ برای مهاجرت خودکار
-    monshiId: '',          // شناسهٔ اکستنشن منشی برای پل امن
+    monshiId: '',          // شناسهٔ اکستنشنِ قدیمیِ منشی برای پل امن بین‌اکستنشنی
     momTemplates: [],      // قالب‌های سفارشی صورت‌جلسه [{id,name,description,instructions}]
     dayEndHour: 17,
     theme: 'auto',         // auto | dark | light
@@ -52,7 +53,15 @@ const Store = (() => {
     updateCheckedAt: 0,                // آخرین باری که نسخه بررسی شد
     updateSeen: '',                    // نسخه‌ای که کاربر بنرش را بسته
     lastRelease: null,                 // آخرین ریلیزِ دیده‌شده
-    looseDismissed: {}     // سرِنخ‌های «از جلسه‌ها چه ماند» که کاربر نادیده گرفته: { کلید: زمان }
+    looseDismissed: {},    // سرِنخ‌های «از جلسه‌ها چه ماند» که کاربر نادیده گرفته: { کلید: زمان }
+    bridgeOn: false,       // نوشتنِ snapshot.json روی دیسک برای ابزارهای بیرونی — پیش‌فرض خاموش
+    bridgeMode: 'mom',     // meta | mom | full — سطحِ حساسیت؛ پیش‌فرضِ امن، بدون متنِ خام
+    bridgeWroteAt: 0,      // آخرین باری که فایل نوشته شد
+    bridgeDirName: '',     // نامِ پوشهٔ انتخابی، فقط برای نمایش (خودِ دسترسی در IndexedDB است)
+    bridgeSteps: {},       // قدم‌های راه‌اندازیِ پل: { node, config, restart, ask }
+    bridgePath: '',        // مسیری که کاربر برای ساختِ تنظیمات چسبانده — فقط متن
+    bridgeRepo: '',        // پوشهٔ خودِ منشی؛ جدا از bridgePath چون دو چیزِ متفاوت‌اند
+    bridgeNode: ''         // مسیر کاملِ Node — بدونش اپ‌های دسکتاپ سرور را بالا نمی‌آورند
   };
 
   // ── نادیده‌گرفتنِ سرِنخ‌ها ────────────────────────────
@@ -128,6 +137,9 @@ const Store = (() => {
   }
 
   // ---------- کارها ----------
+  // اولویت: ۰ یعنی تعیین‌نشده. عددِ بزرگ‌تر = مهم‌تر، تا مقایسه بدیهی باشد.
+  const PRIORITIES = [0, 1, 2, 3];
+  const PRIORITY_FA = { 0: '', 1: 'کم', 2: 'متوسط', 3: 'زیاد' };
   // { id, title, who, dir:'mine'|'theirs', due:'YYYY-MM-DD'|null, status:'open'|'done',
   //   createdAt, doneAt, source:'manual'|'omnibox'|'monshi', meetingRef, recur }
   async function getTasks() {
@@ -155,8 +167,11 @@ const Store = (() => {
       subtasks: Array.isArray(data.subtasks) ? data.subtasks : [],
       slot: data.slot || null,  // { start:ISO, end:ISO } — بازهٔ زمان‌بندی‌شده روی خط‌زمانی
       stage: data.stage || 'todo',  // todo | doing | done — ستونِ کانبان
-      notes: data.notes || '',      // توضیحات کار (هر وقت قابل‌ویرایش)
+      notes: data.notes || '',      // آخرین توضیح — برای نمایشِ فشرده و سازگاری
+      noteLog: Array.isArray(data.noteLog) ? data.noteLog : [],  // دفترچه: هر توضیح با زمانِ خودش
       estimate: data.estimate || null,   // دقیقه — برای جاکردن در وقت آزاد
+      priority: PRIORITIES.includes(data.priority) ? data.priority : 0,  // ۰ بدون، ۱ کم، ۲ متوسط، ۳ زیاد
+      projectId: data.projectId || null,   // پروژه/حوزه — یکی، نه چندتا (برچسب برای چندتایی است)
       updatedAt: new Date().toISOString(), // آخرین تکانِ کار — مبنای «پوسیدگی»
       lastNudgeAt: data.lastNudgeAt || null, // آخرین تلنگر (فقط کارهای سپرده‌شده)
       nudgeCount: data.nudgeCount || 0
@@ -169,17 +184,36 @@ const Store = (() => {
   const subId = () => 's' + Math.random().toString(36).slice(2, 8);
 
   // ---------- زیرکارها ----------
-  async function addSubtask(taskId, title) {
+  // توضیحِ زیرکار سقف دارد تا یک چسباندنِ بی‌حواس، ذخیرهٔ اکستنشن را باد نکند
+  const SUBNOTE_MAX = 2000;
+  const cleanNote = v => (typeof v === 'string' ? v : '').slice(0, SUBNOTE_MAX);
+
+  async function addSubtask(taskId, title, note) {
     title = (title || '').trim();
     if (!title) return null;
     const tasks = await getTasks();
     const t = tasks.find(x => x.id === taskId);
     if (!t) return null;
     if (!Array.isArray(t.subtasks)) t.subtasks = [];
-    const sub = { id: subId(), title, done: false };
+    const sub = { id: subId(), title, done: false, note: cleanNote(note) };
     t.subtasks.push(sub);
     await saveTasks(tasks);
     return sub;
+  }
+
+  // ویرایشِ عنوان یا توضیحِ یک زیرکار. فقط همان دو فیلد — نه چیز دیگر.
+  async function updateSubtask(taskId, subId2, patch) {
+    const tasks = await getTasks();
+    const t = tasks.find(x => x.id === taskId);
+    const s = t && (t.subtasks || []).find(x => x.id === subId2);
+    if (!s) return null;
+    if (patch && typeof patch.title === 'string') {
+      const v = patch.title.trim();
+      if (v) s.title = v;              // عنوانِ خالی زیرکار را بی‌نام نمی‌کند
+    }
+    if (patch && 'note' in patch) s.note = cleanNote(patch.note);
+    await saveTasks(tasks);
+    return s;
   }
   async function toggleSubtask(taskId, subId) {
     const tasks = await getTasks();
@@ -196,6 +230,248 @@ const Store = (() => {
     if (!t) return;
     t.subtasks = (t.subtasks || []).filter(x => x.id !== subId);
     await saveTasks(tasks);
+  }
+
+  // ---------- دفترچهٔ توضیحات ----------
+  // هر توضیح یک ثبتِ جدا با زمانِ خودش است، نه بازنویسیِ متنِ قبلی.
+  // `notes` (رشته) هم می‌ماند چون هفت جای دیگر مصرفش می‌کنند — آخرین ثبت در آن
+  // می‌نشیند. کارهای قدیمی که فقط `notes` دارند، در خواندن به یک ثبت تبدیل
+  // می‌شوند؛ **داده بازنویسی نمی‌شود**، پس مهاجرت ریسک ندارد.
+  const NOTE_MAX = 4000;
+  const noteId = () => 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+
+  function noteEntries(t) {
+    if (!t) return [];
+    const log = Array.isArray(t.noteLog) ? t.noteLog.filter(n => n && n.text) : [];
+    if (log.length) return log.map(n => ({ id: n.id || noteId(), at: n.at || null, text: String(n.text) }));
+    const legacy = String(t.notes || '').trim();
+    if (!legacy) return [];
+    // زمانِ ثبتِ قدیمی را نمی‌دانیم؛ نزدیک‌ترین حدس، آخرین تغییرِ همان کار است
+    return [{ id: 'legacy', at: t.updatedAt || t.createdAt || null, text: legacy, legacy: true }];
+  }
+
+  async function addNote(taskId, text) {
+    const body = String(text || '').trim().slice(0, NOTE_MAX);
+    if (!body) return null;
+    const tasks = await getTasks();
+    const t = tasks.find(x => x.id === taskId);
+    if (!t) return null;
+    // ثبتِ قدیمی را هم وارد دفترچه کن تا گم نشود
+    if (!Array.isArray(t.noteLog) || !t.noteLog.length) {
+      const legacy = String(t.notes || '').trim();
+      t.noteLog = legacy ? [{ id: noteId(), at: t.updatedAt || t.createdAt || null, text: legacy }] : [];
+    }
+    const entry = { id: noteId(), at: new Date().toISOString(), text: body };
+    t.noteLog.push(entry);
+    t.notes = body;                 // آخرین توضیح، برای نمایشِ فشرده
+    t.updatedAt = entry.at;
+    await saveTasks(tasks);
+    return entry;
+  }
+
+  async function removeNote(taskId, entryId) {
+    const tasks = await getTasks();
+    const t = tasks.find(x => x.id === taskId);
+    if (!t || !Array.isArray(t.noteLog)) return null;
+    const idx = t.noteLog.findIndex(n => n && n.id === entryId);
+    if (idx === -1) return null;
+    const [gone] = t.noteLog.splice(idx, 1);
+    t.notes = t.noteLog.length ? t.noteLog[t.noteLog.length - 1].text : '';
+    t.updatedAt = new Date().toISOString();
+    await saveTasks(tasks);
+    return gone;
+  }
+
+  // ---------- پروژه‌ها و حوزه‌ها ----------
+  // یک نوع، نه دو نوع: «حوزه» همان پروژه‌ای است که پروژه‌های دیگر زیرش‌اند.
+  // parentId اختیاری و عمق حداکثر دو — بیشتر از این، سازماندهی خودش کار می‌شود.
+  // { id, name, parentId, color, archived, createdAt }
+  const PROJECT_COLORS = ['sky', 'grass', 'amber', 'rose', 'violet', 'slate'];
+  // مرحله‌ها عمداً عمومی‌اند، نه فروش‌محور — منشی CRM نیست
+  const PROJECT_STAGES = [
+    { id: 'idea', name: 'ایده' },
+    { id: 'active', name: 'در جریان' },
+    { id: 'waiting', name: 'منتظر' },
+    { id: 'done', name: 'تمام‌شده' }
+  ];
+  const STAGE_IDS = PROJECT_STAGES.map(x => x.id);
+  const PROJ_NAME_MAX = 60;
+  const newProjectId = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  async function getProjects() {
+    const { vd_projects } = await storage.get('vd_projects');
+    return Array.isArray(vd_projects) ? vd_projects : [];
+  }
+  async function saveProjects(list) { await storage.set({ vd_projects: list }); }
+
+  async function saveProject(data) {
+    const name = String(data && data.name || '').trim().slice(0, PROJ_NAME_MAX);
+    if (!name) return null;
+    const list = await getProjects();
+    const id = data.id || newProjectId();
+    const existing = list.find(p => p.id === id);
+
+    // والدِ معتبر: باید وجود داشته باشد، خودش نباشد، و خودش والد نداشته باشد
+    let parentId = data.parentId || null;
+    if (parentId) {
+      const par = list.find(p => p.id === parentId);
+      if (!par || par.id === id || par.parentId) parentId = null;
+    }
+    // اگر خودش فرزند دارد، نمی‌تواند زیرِ کسی برود (عمق از دو بیشتر نشود)
+    if (parentId && list.some(p => p.parentId === id)) parentId = null;
+
+    const clean = {
+      id, name, parentId,
+      stage: STAGE_IDS.includes(data.stage) ? data.stage : (existing && existing.stage) || 'active',
+      color: PROJECT_COLORS.includes(data.color) ? data.color : (existing && existing.color) || PROJECT_COLORS[list.length % PROJECT_COLORS.length],
+      archived: !!data.archived,
+      createdAt: (existing && existing.createdAt) || new Date().toISOString()
+    };
+    if (existing) Object.assign(existing, clean); else list.push(clean);
+    await saveProjects(list);
+    return clean;
+  }
+
+  // حذفِ پروژه هرگز کار را حذف نمی‌کند — فقط بی‌پروژه‌شان می‌کند.
+  // زیرپروژه‌ها هم یک سطح بالا می‌آیند، نه اینکه یتیم شوند.
+  async function removeProject(id) {
+    const list = await getProjects();
+    const gone = list.find(p => p.id === id);
+    if (!gone) return null;
+    const kids = list.filter(p => p.parentId === id).map(p => p.id);
+    const next = list.filter(p => p.id !== id).map(p => p.parentId === id ? { ...p, parentId: gone.parentId || null } : p);
+    await saveProjects(next);
+    const tasks = await getTasks();
+    let touched = false;
+    for (const t of tasks) if (t.projectId === id) { t.projectId = null; touched = true; }
+    if (touched) await saveTasks(tasks);
+    // جلسه‌ها هم نباید به پروژهٔ ناموجود اشاره کنند — ولی خودشان دست‌نخورده می‌مانند
+    const sessions = await getSessions();
+    let sTouched = false;
+    for (const sn of sessions) if (sn.projectId === id) { sn.projectId = null; sTouched = true; }
+    if (sTouched) await saveSessions(sessions);
+    return { removed: gone, promoted: kids };
+  }
+
+  // درختِ دوسطحی برای نمایش، با شمارِ کارهای باز
+  function projectTree(projects, tasks) {
+    const openCount = new Map();
+    for (const t of tasks || []) {
+      if (t.status === 'done' || !t.projectId) continue;
+      openCount.set(t.projectId, (openCount.get(t.projectId) || 0) + 1);
+    }
+    const all = (projects || []).filter(p => p && p.id);
+    const roots = all.filter(p => !p.parentId);
+    const node = p => {
+      const kids = all.filter(c => c.parentId === p.id).map(c => ({ ...c, open: openCount.get(c.id) || 0, children: [] }));
+      const own = openCount.get(p.id) || 0;
+      return { ...p, open: own, total: own + kids.reduce((s, k) => s + k.open, 0), children: kids };
+    };
+    return roots.map(node).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name, 'fa'));
+  }
+
+  // جلسه‌های یک پروژه **مشتق** می‌شوند، نه ذخیره: هر جلسه‌ای که کاری از آن
+  // به این پروژه وصل است. پس با جابه‌جایی کارها خودش درست می‌ماند و
+  // دادهٔ تازه‌ای برای همگام‌نگه‌داشتن ساخته نمی‌شود.
+  function projectMeetingRefs(projectId, tasks, includeChildren, sessions) {
+    const ids = new Set(Array.isArray(includeChildren) ? [projectId, ...includeChildren] : [projectId]);
+    const refs = new Set();
+    for (const t of tasks || []) {
+      if (t.meetingRef && ids.has(t.projectId)) refs.add(t.meetingRef);
+    }
+    for (const sn of sessions || []) if (sn && sn.id && ids.has(sn.projectId)) refs.add(sn.id);
+    return [...refs];
+  }
+
+  // پروژهٔ یک جلسه: نسبتِ صریح، وگرنه از پروژهٔ کارهایی که از آن جلسه آمده‌اند.
+  // اگر کارها روی چند پروژه پخش باشند، پرتکرارترین برنده است.
+  function sessionProject(session, tasks) {
+    if (!session) return { id: null, explicit: false };
+    if (session.projectId) return { id: session.projectId, explicit: true };
+    const count = new Map();
+    for (const t of tasks || []) {
+      if (t && t.meetingRef === session.id && t.projectId) {
+        count.set(t.projectId, (count.get(t.projectId) || 0) + 1);
+      }
+    }
+    let best = null, n = 0;
+    for (const [id, c] of count) if (c > n) { n = c; best = id; }
+    return { id: best, explicit: false };
+  }
+
+  async function setSessionProject(sessionId, projectId) {
+    return updateSession(sessionId, { projectId: projectId || null });
+  }
+
+  // پروندهٔ کاملِ یک پروژه — همه‌چیز از دادهٔ موجود مشتق می‌شود.
+  // هیچ فیلدِ تازه‌ای برای همگام‌نگه‌داشتن ساخته نمی‌شود.
+  function projectDossier(projectId, projects, tasks, sessions, now = new Date()) {
+    const all = (projects || []).filter(p => p && p.id);
+    const p = all.find(x => x.id === projectId);
+    if (!p) return null;
+    const children = all.filter(c => c.parentId === projectId);
+    const ids = new Set([projectId, ...children.map(c => c.id)]);
+
+    const own = (tasks || []).filter(t => t && ids.has(t.projectId));
+    const open = own.filter(t => t.status !== 'done');
+    const done = own.filter(t => t.status === 'done');
+    const mine = open.filter(t => t.dir !== 'theirs');
+    const theirs = open.filter(t => t.dir === 'theirs');
+
+    // کارِ بعدی: بالاترین امتیازِ همان منطقِ هوشمند. یکی، نه ده‌تا.
+    const next = mine.slice().sort((a, b) => taskScore(b, now) - taskScore(a, now))[0] || null;
+
+    // دو راه به یک جلسه: یا کاری از آن به این پروژه وصل است (مشتق)، یا خودِ
+    // جلسه صریح به پروژه نسبت داده شده. جلسه‌ای که هیچ کاری ندارد فقط از راه دوم می‌آید.
+    const refs = new Set(own.filter(t => t.meetingRef).map(t => t.meetingRef));
+    const meetings = (sessions || [])
+      .filter(sn => sn && (refs.has(sn.id) || ids.has(sn.projectId)))
+      .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+
+    // آدم‌ها از دو جا: مسئولِ کارها و گویندگانِ جلسه‌های همین پروژه
+    const people = new Map();
+    const touch = (name, when) => {
+      const key = String(name || '').trim();
+      if (!key) return;
+      const cur = people.get(key) || { name: key, open: 0, lastAt: null };
+      if (when && (!cur.lastAt || when > cur.lastAt)) cur.lastAt = when;
+      people.set(key, cur);
+    };
+    for (const sn of meetings) {
+      for (const r of sn.transcript || []) if (r && r.speaker) touch(r.speaker, sn.startedAt || null);
+    }
+    for (const t of open) if (t.who) {
+      touch(t.who, null);
+      const e = people.get(String(t.who).trim());
+      if (e) e.open++;
+    }
+
+    const lastMeeting = meetings[0] || null;
+    const DAYMS = 86400000;
+    const daysSince = ts => ts ? Math.floor((now - new Date(ts)) / DAYMS) : null;
+
+    return {
+      project: p,
+      children,
+      stage: p.stage || 'active',
+      next,
+      counts: {
+        open: open.length, done: done.length,
+        mine: mine.length, theirs: theirs.length,
+        meetings: meetings.length
+      },
+      tasks: { open, done, mine, theirs },
+      meetings,
+      lastMeetingAt: lastMeeting ? lastMeeting.startedAt : null,
+      daysSinceMeeting: daysSince(lastMeeting && lastMeeting.startedAt),
+      people: [...people.values()].sort((a, b) => b.open - a.open || (b.lastAt || 0) - (a.lastAt || 0)),
+      // پروژه‌ای که کارِ بازی ندارد ولی تمام‌شده هم اعلام نشده، راکد است
+      stalled: p.stage !== 'done' && open.length === 0 && own.length > 0
+    };
+  }
+
+  async function setTaskProject(taskId, projectId) {
+    return updateTask(taskId, { projectId: projectId || null });
   }
 
   // ---------- پروندهٔ آدم‌ها (هویت‌دار) ----------
@@ -424,16 +700,19 @@ const Store = (() => {
       const from = t.due ? J.fromISO(t.due) : new Date();
       const nextDue = DP.nextOccurrence(t.recur, from);
       // نمونهٔ بعدی باید همان کار باشد، نه یک عنوانِ خالی: برچسب، چک‌لیست،
-      // توضیحات، سنجاق و تخمینِ زمان همه با آن می‌روند. زیرکارها باز می‌شوند
+      // توضیحات، سنجاق، اولویت و تخمینِ زمان همه با آن می‌روند — ولی *دفترچهٔ*
+      // توضیحات (noteLog) نه: آن سابقهٔ رخدادِ قبلی است، نه دستورالعملِ کار.
+      // زیرکارها باز می‌شوند
       // چون رخدادِ تازه است، و شناسهٔ تازه می‌گیرند تا با نمونهٔ قبلی قاطی نشوند.
       spawned = {
         ...makeTask({
           title: t.title, who: t.who, whoId: t.whoId, dir: t.dir, source: t.source,
           meetingRef: t.meetingRef, recur: t.recur, tags: [...(t.tags || [])],
-          pinned: !!t.pinned, notes: t.notes || '', estimate: t.estimate || null
+          pinned: !!t.pinned, notes: t.notes || '', estimate: t.estimate || null,
+          priority: t.priority || 0, projectId: t.projectId || null
         }),
         due: J.iso(nextDue),
-        subtasks: (t.subtasks || []).map(s => ({ id: subId(), title: s.title, done: false }))
+        subtasks: (t.subtasks || []).map(s => ({ id: subId(), title: s.title, done: false, note: s.note || '' }))
       };
       t.recur = null; // رخداد کامل‌شده دیگر تکرار نمی‌شود؛ تکرار به نمونهٔ تازه منتقل شد
       tasks.push(spawned);
@@ -500,6 +779,9 @@ const Store = (() => {
   function taskScore(t, now = new Date()) {
     let score = 0;
     if (t.pinned) score += 1000;
+    // «زیاد» (۳۰۰) از ددلاینِ امروز (۱۵۰) بالاتر می‌رود ولی از کارِ چندروز
+    // عقب‌افتاده پایین‌تر می‌ماند — اولویت جای ددلاین را نمی‌گیرد
+    score += (t.priority || 0) * 100;
     if (t.due) {
       const d = daysDiff(t.due, now);
       if (d < 0) score += 200 + Math.min(-d, 30) * 10;   // هرچه عقب‌افتاده‌تر، بالاتر
@@ -522,12 +804,15 @@ const Store = (() => {
   // چرا این کار بالاست — برای اینکه مرتب‌سازیِ هوشمند جعبهٔ سیاه نباشد
   function scoreReason(t, now = new Date()) {
     if (t.pinned) return 'سنجاق‌شده';
-    if (t.due) {
-      const d = daysDiff(t.due, now);
-      if (d < 0) return `${J.faDigits(-d)} روز عقب‌افتاده`;
-      if (d === 0) return 'ددلاین امروز';
-      if (d === 1) return 'ددلاین فردا';
+    const dd = t.due ? daysDiff(t.due, now) : null;
+    // اگر هم عقب‌افتاده است هم اولویت دارد، عقب‌افتادگی فوری‌تر است
+    if (dd != null && dd < 0) return `${J.faDigits(-dd)} روز عقب‌افتاده`;
+    if (t.priority >= 2) return 'اولویت ' + PRIORITY_FA[t.priority];
+    if (dd != null) {
+      if (dd === 0) return 'ددلاین امروز';
+      if (dd === 1) return 'ددلاین فردا';
     }
+    if (t.priority === 1) return 'اولویت کم';
     if (t.slot && new Date(t.slot.start).toDateString() === now.toDateString()) return 'برایش وقت گذاشته‌ای';
     const subs = t.subtasks || [];
     if (subs.length && subs.some(s => s.done) && !subs.every(s => s.done)) return 'نیمه‌کاره';
@@ -750,40 +1035,125 @@ const Store = (() => {
 
   // ---------- پروندهٔ آدم‌ها ----------
   // هویتِ فرد با «ایمیل» تفکیک می‌شود: دو نفر با نامِ یکسان ولی ایمیلِ متفاوت = دو پرونده.
-  function peopleFiles(tasks, now = new Date(), events = [], meta = {}) {
+  // ── یکسان‌سازیِ نام ──────────────────────────────────
+  // بزرگ‌ترین منبعِ آدمِ تکراری در فارسی، خودِ املا است: «مصطفي» و «مصطفی»،
+  // «كريم» و «کریم»، نیم‌فاصله، فاصلهٔ اضافه. norm همان تابعِ جست‌وجوست تا
+  // دو جای برنامه یک تعریف از «همان آدم» داشته باشند.
+  // عمداً فقط املا را یکی می‌کند: «رضا» و «Reza» دو نفرند تا وقتی که کاربر
+  // خودش ادغامشان کند. حدس‌زدنِ این یکی، آدم‌های متفاوت را قاطی می‌کند.
+  const nameKey = v => SRCH.norm(String(v == null ? '' : v))
+    .replace(/[.؟?!،,;:]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // نامِ نمایشی: از میان املاهای مختلفِ یک نفر، پرتکرارترین و در تساوی بلندترین
+  function bestName(counts) {
+    let best = '', bestN = -1;
+    for (const [name, n] of counts) {
+      if (n > bestN || (n === bestN && name.length > best.length)) { best = name; bestN = n; }
+    }
+    return best;
+  }
+
+  // ── چیزهایی که آدم نیستند ────────────────────────────
+  // پاک‌سازیِ متن برای گویندهٔ ناشناس برچسبِ ثابتِ «گوینده» می‌گذارد؛ اگر
+  // فیلترش نکنیم، پرتکرارترین «آدم» می‌شود. اتاق و دستگاهِ جلسه هم همین‌طور.
+  // ورودی باید از پیش با nameKey یکسان‌سازی شده باشد.
+  const NOT_PERSON = [
+    /^گوینده ?\d*$/,
+    /^(speaker|unknown|ناشناس|نامشخص|بدون نام) ?\d*$/,
+    /^(you|شما|me|من|خودم)$/,
+    /(conference|meeting room|اتاق جلسه)/
+  ];
+  const notPerson = k => !k || NOT_PERSON.some(re => re.test(k));
+
+  // نامِ حاضرانِ یک جلسه: فهرستِ ثبت‌شده اگر هست، وگرنه گوینده‌های متن.
+  // جلسه‌ای که فقط پیاده‌سازی دارد هم باید حاضرانش شناخته شوند.
+  // ایمیل باید همراه نام بیاید، نه اینکه دور ریخته شود: تنها چیزی که دو
+  // هم‌نامِ واقعی را از هم جدا می‌کند همین است.
+  function sessionPeople(s) {
+    const out = [];
+    const push = v => {
+      let name = String((v && (v.name ?? v)) || '').trim();
+      let email = String((v && v.email) || '').trim();
+      if (!email && looksLikeEmail(name)) { email = name; name = ''; }
+      if (!name && !email) return;
+      out.push({ name, email });
+    };
+    for (const p of (s && s.participants) || []) push(p);
+    if (!out.length) for (const r of (s && s.transcript) || []) if (r) push(r.speaker);
+    return out;
+  }
+
+  // self می‌تواند نام باشد یا { name, email } — ایمیل مطمئن‌تر است
+  function peopleFiles(tasks, now = new Date(), events = [], meta = {}, sessions = [], self = '') {
+    const selfName = typeof self === 'string' ? self : (self && self.name) || '';
+    const selfMail = String((self && self.email) || '').trim().toLowerCase();
     // نام‌های مستعار (پس از ادغام): نامِ قدیمی → نامِ اصلی
     const aliasMap = new Map();
     for (const m of Object.values(meta || {})) {
       if (!m) continue;
-      for (const a of m.aliases || []) if (a && m.name) aliasMap.set(a.trim(), m.name);
-      if (m.aliasOf && m.name) aliasMap.set(m.name, String(m.aliasOf).trim()); // میراث
+      // کلیدِ یکسان‌شده، وگرنه «مصطفي» به‌عنوان مستعارِ «مصطفی» پیدا نمی‌شود
+      for (const a of m.aliases || []) if (a && m.name) aliasMap.set(nameKey(a), m.name);
+      if (m.aliasOf && m.name) aliasMap.set(nameKey(m.name), String(m.aliasOf).trim()); // میراث
     }
-    const aliasOf = n => aliasMap.get((n || '').trim()) || (n || '').trim();
+    const aliasOf = n => aliasMap.get(nameKey(n)) || String(n == null ? '' : n).trim();
     // نام → مجموعهٔ ایمیل‌ها (از تقویم + متا) برای تشخیص یکتایی
     const nameEmails = new Map();
     const addEmail = (name, email) => {
       if (!name || !email) return;
-      const k = aliasOf(name.trim()); if (!k) return;
+      const k = nameKey(aliasOf(name)); if (!k) return;
       if (!nameEmails.has(k)) nameEmails.set(k, new Set());
       nameEmails.get(k).add(email.toLowerCase());
     };
     for (const ev of events) for (const a of ev.attendees || []) addEmail(a, (ev.attendeeEmails || {})[a]);
     for (const m of Object.values(meta || {})) if (m && m.email) addEmail(m.name, m.email);
-    // کلیدِ پایدارِ یک ارجاع: ایمیل اگر معلوم باشد؛ وگرنه اگر نام دقیقاً یک ایمیل دارد همان؛ وگرنه نام
+    // ایمیلِ حاضرانِ جلسه هم بخشی از هویت است. نتیجهٔ مهمش این است که اگر یک
+    // نام دو ایمیل داشته باشد، دیگر «یک نفر» فرض نمی‌شود.
+    for (const s of (sessions || [])) for (const q of sessionPeople(s)) addEmail(q.name, q.email);
+    // فردِ ثبت‌شدهٔ بی‌ایمیل با شناسهٔ خودش کلید می‌خورد، ولی ارجاع‌های نامی
+    // (کار، حاضرِ جلسه) با نام. بدونِ این نگاشت، هر دو یک نفرند و دو کارت
+    // می‌گیرند — همان تکراری‌سازی‌ای که نباید پیش بیاید.
+    const metaByName = new Map();
+    for (const [id, m] of Object.entries(meta || {})) {
+      if (!m || m.aliasOf || m.email) continue;
+      const k = nameKey(m.name); if (!k) continue;
+      metaByName.set(k, metaByName.has(k) ? null : id);   // null یعنی هم‌نامِ مبهم
+    }
+    // کلیدِ پایدارِ یک ارجاع: ایمیل اگر معلوم باشد؛ وگرنه اگر نام دقیقاً یک ایمیل دارد همان؛
+    // وگرنه پروندهٔ ثبت‌شدهٔ هم‌نام؛ وگرنه نامِ یکسان‌شده.
     const keyOf = (name, email) => {
-      name = aliasOf((name || '').trim());
+      const k = nameKey(aliasOf(name));
       if (email) return 'e:' + email.toLowerCase();
-      const set = nameEmails.get(name);
+      const set = nameEmails.get(k);
       if (set && set.size === 1) return 'e:' + [...set][0];
-      return 'n:' + name;
+      const mid = metaByName.get(k);
+      if (mid) return mid;
+      return 'n:' + k;
     };
     const map = new Map();
+    // املاهای دیده‌شدهٔ هر پرونده، برای انتخابِ نامِ نمایشی
+    const variants = new Map();
+    const seeName = (key, name) => {
+      const n = String(name == null ? '' : name).trim();
+      if (!n) return;
+      if (!variants.has(key)) variants.set(key, new Map());
+      const c = variants.get(key);
+      c.set(n, (c.get(n) || 0) + 1);
+    };
     const ensure = (key, name) => {
       if (!map.has(key)) map.set(key, {
         key, id: key, name, email: '', group: '', note: '', metaLastMet: null,
-        open: [], done: 0, waiting: 0, meetings: [], lastMet: null, nextMeet: null, lastActivity: null
+        open: [], done: 0, waiting: 0, meetings: [], sessions: [],
+        lastMet: null, nextMeet: null, lastActivity: null
       });
-      const p = map.get(key); if (name && !p.name) p.name = name; return p;
+      seeName(key, name);
+      const p = map.get(key);
+      // کلیدِ ایمیلی خودش ایمیل است؛ اگر ننویسیمش، کارت «بی‌ایمیل» به نظر
+      // می‌رسد در حالی که هویتش دقیقاً روی همان ایمیل ایستاده.
+      if (!p.email && key.startsWith('e:')) p.email = key.slice(2);
+      if (name && !p.name) p.name = name;
+      return p;
     };
     // افرادِ ثبت‌شده در پرونده (کلید = شناسهٔ پایدار)
     for (const [id, m] of Object.entries(meta || {})) {
@@ -807,7 +1177,37 @@ const Store = (() => {
       const act = t.doneAt || t.createdAt;
       if (act && (!p.lastActivity || act > p.lastActivity)) p.lastActivity = act;
     }
-    // جلسه‌های تقویم — فقط برای کسانی که پرونده دارند
+    // ── جلسه‌های واقعی ──────────────────────────────────
+    // تا امروز «آدم‌ها» فقط تقویم را می‌دید، یعنی جلسه‌ای که برگزار شده و
+    // متن دارد در پروندهٔ کسی نمی‌نشست. برعکسِ تقویم، اینجا حضور در جلسه
+    // خودش پرونده می‌سازد — چون سؤالِ اصلی همین است: «با او چند جلسه داشتم؟»
+    const selfKey = nameKey(selfName);
+    for (const s of (sessions || [])) {
+      if (!s || !s.id) continue;
+      const when = s.startedAt || s.createdAt || null;
+      const seen = new Set();
+      for (const raw of sessionPeople(s)) {
+        const name = aliasOf(raw.name);
+        const email = raw.email;
+        const nk = nameKey(name);
+        // خودِ کاربر، «You»ی Meet، برچسبِ گویندهٔ ناشناس و اتاقِ جلسه آدم نیستند
+        if ((nk && nk === selfKey) || (email && email.toLowerCase() === selfMail)) continue;
+        if (!email && notPerson(nk)) continue;
+        // ایمیل حرفِ آخر را می‌زند: دو «رضا» با دو ایمیل، دو نفرند.
+        const key = keyOf(name, email);
+        if (seen.has(key)) continue;               // یک نفر در یک جلسه، یک بار
+        seen.add(key);
+        const p = ensure(key, name || email);
+        if (email && !p.email) p.email = email;
+        p.sessions.push({ id: s.id, title: s.title || 'جلسهٔ بی‌عنوان', at: when });
+        if (when && (!p.lastMet || new Date(when) > new Date(p.lastMet))) p.lastMet = when;
+      }
+    }
+
+    // جلسه‌های تقویم — فقط برای کسانی که پرونده دارند.
+    // عمداً بعد از جلسه‌های واقعی: کسی که فقط در زیرنویسِ جلسه دیده شده هم
+    // باید بتواند ایمیل و رویدادهای تقویمش را بگیرد. قبلاً این حلقه جلوتر
+    // بود و چون هنوز پرونده‌ای نبود، ایمیلِ تقویم اصلاً به کارت نمی‌رسید.
     for (const ev of events) for (const a of ev.attendees || []) {
       const name = aliasOf((a || '').trim()); if (!name) continue;
       const email = (ev.attendeeEmails || {})[a];
@@ -820,8 +1220,14 @@ const Store = (() => {
       if (st <= now && (!p.lastMet || st > new Date(p.lastMet))) p.lastMet = ev.start;
       if (st > now && (!p.nextMeet || st < new Date(p.nextMeet))) p.nextMeet = ev.start;
     }
+
     const byDue = (a, b) => (a.due || '9999').localeCompare(b.due || '9999');
     const out = [...map.values()].map(p => {
+      // از میان املاهای دیده‌شده، پرتکرارترین را نشان بده
+      const v = variants.get(p.key);
+      if (v && v.size) p.name = bestName(v);
+      p.sessions.sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0));
+      p.metCount = p.sessions.length;
       p.open.sort(byDue);
       const overdue = p.open.filter(t => t.due && daysDiff(t.due, now) < 0).length;
       const oldest = p.open.reduce((min, t) => t.due && daysDiff(t.due, now) < min ? daysDiff(t.due, now) : min, 0);
@@ -836,7 +1242,15 @@ const Store = (() => {
     // نام‌های تکراری را علامت بزن تا رابط کاربری با ایمیل تفکیک‌شان کند
     const nameCount = new Map();
     for (const p of out) nameCount.set(p.name, (nameCount.get(p.name) || 0) + 1);
-    for (const p of out) p.dupName = (nameCount.get(p.name) || 0) > 1;
+    for (const p of out) {
+      p.dupName = (nameCount.get(p.name) || 0) > 1;
+      // پرونده‌ای که فقط روی نام ایستاده و می‌دانیم آن نام چند ایمیل دارد،
+      // ممکن است چند نفر باشد. صادقانه‌تر این است که گفته شود، نه اینکه
+      // وانمود کنیم یک نفر است. جمعش هم نمی‌کنیم و جدا هم نمی‌کنیم — نمی‌دانیم.
+      const emails = nameEmails.get(nameKey(p.name));
+      p.byNameOnly = !p.email;
+      p.ambiguous = !p.email && !!emails && emails.size > 1;
+    }
     out.sort((a, b) => b.open.length - a.open.length || b.total - a.total);
     return out;
   }
@@ -1052,8 +1466,13 @@ const Store = (() => {
     looseKey, dismissLoose, undismissLoose,
     saveAiProfile, removeAiProfile, setActiveAi,
     getTasks, addTask, updateTask, toggleDone, removeTask, restoreTask, reorderTasks,
+    PRIORITIES, PRIORITY_FA, PROJECT_COLORS, NOTE_MAX,
+    noteEntries, addNote, removeNote,
+    PROJECT_STAGES,
+    getProjects, saveProject, removeProject, projectTree, projectMeetingRefs,
+    projectDossier, setTaskProject, sessionProject, setSessionProject,
     touchTask, nudgeTask, taskScore, scoreReason, followupState, followups, staleTasks, fitsInSlot,
-    addSubtask, toggleSubtask, removeSubtask,
+    addSubtask, updateSubtask, toggleSubtask, removeSubtask,
     getPeopleMeta, savePersonNote, savePersonMeta, savePerson, mergePeople, removePerson, personId, resolvePersonRef, mergeParticipants, emailMatchesName,
     getSessions, upsertSession, updateSession, removeSession, importMonshiBackup,
     setAnalysisJob, getAnalysisJob, clearAnalysisJob,

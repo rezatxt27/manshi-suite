@@ -1,5 +1,8 @@
 // وردست — Service Worker: زنگ‌های روزانه، نوار آدرس، به‌روزرسانی تقویم و پل امن منشی
-importScripts('core/jalali.js', 'core/date-parser.js', 'core/ai-client.js', 'core/transcript-cleaner.js', 'core/mom-core.js', 'core/store.js', 'core/ics.js');
+// search.js باید پیش از store.js بیاید: store برای یکسان‌سازیِ نامِ آدم‌ها از
+// MeetSearch.norm استفاده می‌کند. اگر نباشد، سرویس‌ورکر همان خط می‌میرد و
+// کلیکِ روی آیکون هیچ کاری نمی‌کند — بی‌آنکه خطایی به چشمِ کاربر بیاید.
+importScripts('core/jalali.js', 'core/date-parser.js', 'core/ai-client.js', 'core/transcript-cleaner.js', 'core/mom-core.js', 'core/search.js', 'core/store.js', 'core/ics.js');
 
 const ALARMS = { MORNING: 'vd-morning', EVENING: 'vd-evening', ICS: 'vd-ics', FINISH: 'vd-finish' };
 
@@ -115,7 +118,7 @@ async function refreshCalendar() {
 }
 
 // ---------- نوار آدرس: «ود فاکتور رو بفرست تا چهارشنبه» ----------
-chrome.omnibox.setDefaultSuggestion({ description: 'ثبت کار در وردست — تاریخ را طبیعی بنویس: «تا چهارشنبه»، «فردا»، «۵ مرداد»' });
+chrome.omnibox.setDefaultSuggestion({ description: 'ثبت کار در منشی — تاریخ را طبیعی بنویس: «تا چهارشنبه»، «فردا»، «۵ مرداد»' });
 
 chrome.omnibox.onInputChanged.addListener((text, suggest) => {
   const { title, due, recur } = DateParser.parse(text);
@@ -160,7 +163,7 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
         });
         added++;
       }
-      if (added) notify('vd-monshi', 'اقدام‌های جلسه رسید', `${Jalali.faDigits(added)} کار از منشی وارد وردست شد`);
+      if (added) notify('vd-monshi', 'اقدام‌های جلسه رسید', `${Jalali.faDigits(added)} کار از نسخهٔ قدیمی منشی وارد شد`);
       sendResponse({ ok: true, added });
       return;
     }

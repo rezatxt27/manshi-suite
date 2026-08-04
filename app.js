@@ -2,10 +2,17 @@
 // قاعدهٔ امنیتی: هر متن کاربر/مدل فقط با textContent وارد DOM می‌شود؛ innerHTML فقط برای SVGهای ثابت.
 (() => {
   const $ = s => document.querySelector(s);
+  // منطقِ خالصِ برنامهٔ روز از core/agenda.js می‌آید (تست‌دار). نام‌ها همان‌اند
+  // که بودند، پس هیچ فراخوانی‌ای در این فایل عوض نشد.
+  const {
+    DAY_START_H, DAY_END_H, sameDay, normTitle, sessionTime, byNewest,
+    freeGaps, seriesKey, sessionSeries, matchEventForSession,
+    cleanMeetUrl, humanDur, staleLabel, searchNorm
+  } = Agenda;
   const J = Jalali;
   let currentWeek = 0;
   let followupTaskId = null;
-  let cachedTasks = [], cachedEvents = [];
+  let cachedTasks = [], cachedEvents = [], cachedProjects = [];
 
   const ICONS = {
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg>',
@@ -18,6 +25,8 @@
     join: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M19 14.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4.5"/></svg>',
     edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 20H21"/><path d="M16.4 3.6a2.1 2.1 0 0 1 3 3L8.5 17.5l-4 1 1-4z"/></svg>',
     calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="5" width="17.6" height="16" rx="2.6"/><path d="M3.2 10h17.6"/><path d="M8 3v4M16 3v4"/><path d="M7.5 14h2M11 14h2M14.5 14h2M7.5 17.5h2M11 17.5h2"/></svg>',
+    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.2a2 2 0 0 1 2-2h3.4l2 2.4h7.6a2 2 0 0 1 2 2v8.2a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2z"/></svg>',
+    flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4"/><path d="M6 4.5h10.5a.6.6 0 0 1 .48.96L14.6 8.7l2.38 3.24a.6.6 0 0 1-.48.96H6"/></svg>',
     pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16.5V22"/><path d="M8.6 3h6.8v7.2l2.1 3.4a1 1 0 0 1-.85 1.5H7.35a1 1 0 0 1-.85-1.5l2.1-3.4z"/></svg>',
     drag: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="9.5" cy="6" r="1.35"/><circle cx="14.5" cy="6" r="1.35"/><circle cx="9.5" cy="12" r="1.35"/><circle cx="14.5" cy="12" r="1.35"/><circle cx="9.5" cy="18" r="1.35"/><circle cx="14.5" cy="18" r="1.35"/></svg>',
     clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 7.2V12l3.2 2"/></svg>',
@@ -38,25 +47,9 @@
   }
   // startedAt گاهی عدد است و گاهی رشتهٔ ISO (پشتیبانِ منشی) — تفریقِ رشته‌ها NaN می‌دهد
   // و مرتب‌سازی بی‌صدا از کار می‌افتد؛ همیشه از این تابع رد شود.
-  const sessionTime = s => {
-    const v = s && s.startedAt;
-    if (typeof v === 'number') return v;
-    const t = v ? new Date(v).getTime() : 0;
-    return Number.isNaN(t) ? 0 : t;
-  };
-  const byNewest = (a, b) => sessionTime(b) - sessionTime(a);
 
   // نرمال‌سازی برای جست‌وجو: رقم فارسی/عربی → لاتین، ي/ك عربی → ی/ک فارسی،
   // حذف نیم‌فاصله و اعراب. بدون این، جست‌وجوی «۷» متنِ «7» را پیدا نمی‌کند.
-  function searchNorm(s) {
-    return J.enDigits(String(s || ''))
-      .replace(/[ىيﻯﻰﻱﻲ]/g, 'ی')
-      .replace(/[كﻙﻚ]/g, 'ک')
-      .replace(/[‌‏‎]/g, '')
-      .replace(/[ً-ْ]/g, '')
-      .toLowerCase()
-      .trim();
-  }
   function svgBtn(cls, icon, label) {
     const b = el('button', cls);
     b.innerHTML = icon;
@@ -104,7 +97,11 @@
     if (view === 'kiosk') renderKiosk();
     if (view === 'settings') loadSettingsForm();
   }
-  navItems.forEach(btn => btn.addEventListener('click', () => goto(btn.dataset.view)));
+  navItems.forEach(btn => btn.addEventListener('click', () => {
+    // کلیک روی «کارها» در ریل یعنی «فهرست کارها»، نه پروندهٔ بازِ قبلی
+    if (btn.dataset.view === 'tasks') openProjectId = null;
+    goto(btn.dataset.view);
+  }));
   // پیوندهای «رفتن به بخش» (نوار یک‌نگاه، لینکِ همهٔ کارها و…)
   document.addEventListener('click', e => {
     const g = e.target.closest('[data-goto]');
@@ -194,7 +191,7 @@
   // ---------- کارهای امروز (فهرست کامل) ----------
   let todoFilter = 'active';   // active | all | done
   let todoSort = 'smart';      // smart | due | created | alpha | manual
-  let todoGroupBy = 'date';    // date | tag | meeting
+  let todoGroupBy = 'date';    // date | project | tag | meeting | person
   let todoSearch = '';
   let todoTag = null;          // برچسب فعال برای فیلتر
   let todoToolsOpen = false;   // نوار جستجو/مرتب‌سازی تاشو
@@ -301,6 +298,7 @@
     if (!open.length) return todoEmpty(wrap);
 
     // گروه‌بندی بر اساس برچسب یا جلسه (به‌جای تاریخ)
+    if (todoGroupBy === 'project') { renderGroupedByProject(wrap, open, now); return; }
     if (todoGroupBy === 'tag') { renderGroupedByTag(wrap, open, now); return; }
     if (todoGroupBy === 'meeting') { renderGroupedByMeeting(wrap, open, now); return; }
 
@@ -364,6 +362,31 @@
     const tags = [...byTag.keys()].sort((a, b) => byTag.get(b).length - byTag.get(a).length);
     for (const tag of tags) wrap.append(todoSection('#' + tag, sortTasks(byTag.get(tag), 'due', now), 'tag', now, false));
     if (untagged.length) wrap.append(todoSection('بدون برچسب', sortTasks(untagged, 'due', now), 'someday', now, false));
+  }
+
+  // گروه‌بندی بر اساس پروژه: حوزه بالا، زیرپروژه‌هایش زیرِ آن، و ته فهرست بی‌پروژه‌ها
+  function renderGroupedByProject(wrap, open, now) {
+    const byProj = new Map();
+    const none = [];
+    for (const t of open) {
+      if (!t.projectId) { none.push(t); continue; }
+      if (!byProj.has(t.projectId)) byProj.set(t.projectId, []);
+      byProj.get(t.projectId).push(t);
+    }
+    const put = (p, label) => {
+      const list = byProj.get(p.id);
+      if (!list || !list.length) return;
+      byProj.delete(p.id);   // مصرف شد
+      wrap.append(todoSection(label, sortTasks(list, 'due', now), 'tag', now, false));
+    };
+    for (const root of Store.projectTree(cachedProjects, cachedTasks)) {
+      put(root, root.name);
+      for (const kid of root.children) put(kid, root.name + ' › ' + kid.name);
+    }
+    // هر کاری که پروژه‌اش در درخت نبود (کشِ عقب‌مانده، پروژهٔ حذف‌شده) نباید
+    // بی‌صدا ناپدید شود — هیچ گروه‌بندی‌ای حق ندارد کاری را از فهرست بیندازد.
+    for (const [, list] of byProj) none.push(...list);
+    if (none.length) wrap.append(todoSection('بدون پروژه', sortTasks(none, 'due', now), 'someday', now, false));
   }
 
   // گروه‌بندی بر اساس جلسهٔ منبع
@@ -1014,7 +1037,16 @@
     }
   }
 
-  async function renderTodoAsync() { renderTodo(await Store.getTasks()); }
+  // پروژه‌ها هم باید تازه شوند، وگرنه گروه‌بندیِ پروژه با درختِ عقب‌مانده
+  // ساخته می‌شود و کارِ تازه‌پروژه‌شده جایی برای نشستن ندارد.
+  async function renderTodoAsync() {
+    const [tasks, projects] = await Promise.all([Store.getTasks(), Store.getProjects()]);
+    cachedTasks = tasks; cachedProjects = projects || [];
+    if (openProjectId) { await renderProjectPage(); renderProjectBar(); return; }
+    await renderProjectPage();   // پرونده را ببندد و نمای عادی را برگرداند
+    renderProjectBar();
+    renderTodo(tasks);
+  }
 
   function todoRow(t, now, drag) {
     const done = t.status === 'done';
@@ -1089,6 +1121,8 @@
       sc.append(document.createTextNode(` ${sameDay(st, now) ? '' : J.relLabel(J.iso(st), now) + ' '}${hhmm(st)}`));
       chips.append(sc);
     }
+    if (t.projectId) { const pc = projChip(t); if (pc) chips.append(pc); }
+    if (t.priority && !done) chips.append(prioChip(t));
     if (t.recur && !done) {
       const rc = el('span', 'chip chip-recur'); rc.innerHTML = ICONS.repeat;
       rc.append(document.createTextNode(DateParser.recurLabel(t.recur))); chips.append(rc);
@@ -1130,6 +1164,16 @@
     }
     if (t.who) chips.append(el('span', 'chip chip-who', t.who));
     if (chips.children.length) main.append(chips);
+
+    // توضیحِ کار: تا امروز نوشته می‌شد ولی در فهرست دیده نمی‌شد.
+    // کلیک روی آن همان پنجرهٔ ویرایش را باز می‌کند.
+    if (t.notes) {
+      const nb = el('button', 'todo-note');
+      nb.append(el('span', 'todo-note-txt', t.notes));
+      nb.title = 'ویرایش توضیحات';
+      nb.addEventListener('click', () => openNotePopover(nb, t));
+      main.append(nb);
+    }
 
     // پنل زیرکارها (وقتی باز است)
     if (expandedSubs.has(t.id) && !done) main.append(renderSubPanel(t));
@@ -1176,6 +1220,12 @@
       }
       // renderTodoAsync فقط فهرستِ صفحهٔ «کارها» را می‌سازد؛ در «تمرکز امروز»
       // هیچ اتفاقی نمی‌افتاد و پنل تازه با رندرِ بعدی ظاهر می‌شد.
+      mk(ICONS.folder, t.projectId ? 'پروژه: ' + ((projById(t.projectId) || {}).name || '—') : 'انتقال به پروژه',
+        () => openProjectPicker(sum, t), !!t.projectId);
+      mk(ICONS.flag, t.priority ? 'اولویت: ' + Store.PRIORITY_FA[t.priority] : 'تعیین اولویت',
+        () => openPriority(sum, t), !!t.priority);
+      mk(ICONS.note, t.notes ? 'ویرایش توضیحات' : 'افزودن توضیح',
+        () => openNotePopover(sum, t), !!t.notes);
       mk(ICONS.branch, 'زیرکار', async () => { expandedSubs.add(t.id); await renderAll(); });
       mk(ICONS.pin, t.pinned ? 'برداشتن سنجاق' : 'سنجاق به بالا', async () => { await Store.updateTask(t.id, { pinned: !t.pinned }); await renderAll(); }, t.pinned);
       mk(ICONS.trash, 'حذف', removeTask);
@@ -1209,10 +1259,16 @@
       const r = el('div', 'sub-row' + (s.done ? ' is-done' : ''));
       const c = svgBtn('sub-check' + (s.done ? ' is-done' : ''), ICONS.check, 'انجام شد');
       c.addEventListener('click', async () => { await Store.toggleSubtask(t.id, s.id); await renderAll(); });
-      r.append(c, el('span', 'sub-title', s.title));
+      const body = el('div', 'sub-body');
+      body.append(el('span', 'sub-title', s.title));
+      if (s.note) body.append(el('span', 'sub-note', s.note));
+      r.append(c, body);
+      const n = svgBtn('sub-note-btn' + (s.note ? ' is-on' : ''), ICONS.note,
+        s.note ? 'ویرایش توضیح زیرکار' : 'افزودن توضیح به زیرکار');
+      n.addEventListener('click', () => openSubNotePopover(n, t, s));
       const x = svgBtn('sub-del', ICONS.trash, 'حذف زیرکار');
       x.addEventListener('click', async () => { await Store.removeSubtask(t.id, s.id); await renderAll(); });
-      r.append(x);
+      r.append(n, x);
       panel.append(r);
     }
     const form = el('form', 'sub-add');
@@ -1338,10 +1394,17 @@
       pop.style.top = `${(above >= 8 ? above : Math.max(8, window.innerHeight - ph - 8)) + window.scrollY}px`;
     }
     pop.style.maxHeight = `${window.innerHeight - 16}px`;
-    setTimeout(() => document.addEventListener('click', onPopOutside, { once: true }), 0);
+    // نه { once: true }: آن شنونده را حتی وقتی کلیک *داخلِ* پاپ‌آپ بوده برمی‌داشت،
+    // و بعدش پاپ‌آپ با کلیکِ بیرون بسته نمی‌شد. حالا خودمان مدیریتش می‌کنیم.
+    setTimeout(() => document.addEventListener('click', onPopOutside), 0);
   }
   function onPopOutside(e) { if (!e.target.closest('.resched-pop')) closePops(); }
-  function closePops() { document.querySelectorAll('.resched-pop').forEach(p => p.remove()); }
+  // بستن همیشه شنونده را هم برمی‌دارد، وگرنه شنونده‌ها روی هم تلنبار می‌شوند و
+  // کلیکِ بعدی را می‌بلعند — علتِ «بارِ دوم کار نمی‌کند».
+  function closePops() {
+    document.removeEventListener('click', onPopOutside);
+    document.querySelectorAll('.resched-pop').forEach(p => p.remove());
+  }
 
   // منوی زمان‌بندی سریع (ددلاین)
   function openReschedule(anchor, t) {
@@ -1441,11 +1504,6 @@
 
   // ---------- جلسه‌ها ----------
   // پاک‌سازی دفاعیِ لینک Meet هنگام رندر (حتی لینک‌های کش‌شدهٔ آلوده را درست می‌کند)
-  function cleanMeetUrl(url) {
-    if (!url) return '';
-    const m = String(url).match(/https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&'()*+=%]+/);
-    return m ? m[0].replace(/[.,)]+$/, '') : '';
-  }
 
   // رفتن از رویداد تقویم به صفحهٔ جلسه در بخش «جلسه‌ها» (تطبیق با عنوان)
   async function goToMeeting(ev) {
@@ -1482,23 +1540,8 @@
     await new Promise(r => setTimeout(r, 60));
     openSession(id);
   }
-  const normTitle = t => (t || '').replace(/\s+/g, '').toLowerCase();
 
   // رویدادِ تقویمِ متناظر با یک جلسه — امتیازدهی: عنوان + همان‌روز بودن (پایدارتر از تطبیقِ صرفِ عنوان)
-  function matchEventForSession(s, events) {
-    const target = normTitle(s.title);
-    const sDay = s.startedAt ? new Date(s.startedAt) : null;
-    let best = null, bestScore = 0;
-    for (const e of events || []) {
-      const et = normTitle(e.title);
-      let score = 0;
-      if (target && et === target) score += 3;
-      else if (target.length >= 3 && (et.includes(target) || target.includes(et))) score += 2;
-      if (sDay && sameDay(e.start, sDay)) score += 1;      // همان روز، اطمینان بیشتر
-      if (score > bestScore) { bestScore = score; best = e; }
-    }
-    return bestScore >= 2 ? best : null; // دستِ‌کم تطبیقِ عنوان لازم است
-  }
 
   // شرکت‌کننده‌های یک جلسه: از رویداد تقویم (نام+ایمیل) + گوینده‌های زیرنویس (فقط نام).
   // تقویم اغلب ایمیل می‌دهد و زیرنویس نامِ نمایشی، پس یک نفر دو بار در فهرست می‌آمد.
@@ -1571,13 +1614,6 @@
     `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
 
   // مدت به فارسیِ خوانا: ۴۵ دقیقه / ۱ ساعت / ۱ ساعت و ۳۰ دقیقه
-  function humanDur(min) {
-    min = Math.max(0, Math.round(min));
-    const h = Math.floor(min / 60), m = min % 60;
-    if (h && m) return `${J.faDigits(h)} ساعت و ${J.faDigits(m)} دقیقه`;
-    if (h) return `${J.faDigits(h)} ساعت`;
-    return `${J.faDigits(m)} دقیقه`;
-  }
 
   // رویدادِ «روزپوش/زمینه»: تمام‌روز یا خیلی طولانی (مثل هکتون ۸ تا ۲۲، مرخصی، سفر).
   // این‌ها جلسه نیستند — نباید در ریلِ خط‌زمانی، فاصله‌ها، بار کاری یا «جلسهٔ بعدی» بیایند.
@@ -1586,8 +1622,6 @@
     return ev.allDay || (new Date(ev.end) - new Date(ev.start)) >= BG_EVENT_MS;
   }
 
-  const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
-  const DAY_START_H = 8, DAY_END_H = 20; // پنجرهٔ کاری برای فضاهای آزاد
 
   // بلوک‌های مشغولِ یک روز: جلسه‌های واقعی + کارهای زمان‌بندی‌شده
   function dayItems(events, tasks, day) {
@@ -1599,24 +1633,6 @@
   }
 
   // فضاهای آزادِ ≥۲۰ دقیقه در پنجرهٔ کاری (برای امروز از «الان» شروع می‌کند)
-  function freeGaps(items, day, now) {
-    const ws = new Date(day); ws.setHours(DAY_START_H, 0, 0, 0);
-    const we = new Date(day); we.setHours(DAY_END_H, 0, 0, 0);
-    let cursor = new Date(sameDay(day, now) ? Math.max(ws.getTime(), now.getTime()) : ws.getTime());
-    const gaps = [];
-    for (const it of items) {
-      if (it.start > cursor) {
-        const min = Math.round((it.start - cursor) / 60000);
-        if (min >= 20) gaps.push({ start: new Date(cursor), end: new Date(it.start), min });
-      }
-      if (it.end > cursor) cursor = new Date(it.end);
-    }
-    if (we > cursor) {
-      const min = Math.round((we - cursor) / 60000);
-      if (min >= 20) gaps.push({ start: new Date(cursor), end: we, min });
-    }
-    return gaps;
-  }
 
   // زمان‌بندی یک کار داخل یک فاصلهٔ آزاد (پیش‌فرض ۶۰ دقیقه یا اندازهٔ فاصله)
   async function scheduleTask(taskId, gapStart, gapEnd) {
@@ -1920,18 +1936,445 @@
   }
 
   // پاپ‌آور توضیحاتِ کار (توضیح بده که چی شد)
+  // زمانِ نسبیِ کوتاه برای دفترچه — «۲ ساعت پیش»، «دیروز ۱۶:۳۰»
+  function noteStamp(iso) {
+    if (!iso) return 'زمانش ثبت نشده';
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const now = new Date();
+    const min = Math.round((now - d) / 60000);
+    if (min < 1) return 'همین الان';
+    if (min < 60) return J.faDigits(min) + ' دقیقه پیش';
+    if (sameDay(d, now)) return 'امروز ' + hhmm(d);
+    const y = new Date(now); y.setDate(y.getDate() - 1);
+    if (sameDay(d, y)) return 'دیروز ' + hhmm(d);
+    return J.format(d, { weekday: false, year: false }) + ' ' + hhmm(d);
+  }
+
+  // دفترچهٔ توضیحات: هر ثبت با زمانِ خودش می‌ماند، توضیحِ تازه رویش اضافه می‌شود.
   function openNotePopover(anchor, t) {
     closePops();
     const pop = el('div', 'resched-pop note-pop');
-    pop.append(el('div', 'resched-head', 'توضیحاتِ کار'));
+    const entries = Store.noteEntries(t);
+    pop.append(el('div', 'resched-head', entries.length
+      ? 'توضیحات — ' + J.faDigits(entries.length) + ' ثبت'
+      : 'توضیحاتِ کار'));
+
+    if (entries.length) {
+      const log = el('div', 'note-log');
+      // تازه‌ترین بالا: چیزی که همین حالا نوشتی باید اول دیده شود
+      for (const n of [...entries].reverse()) {
+        const item = el('div', 'note-entry');
+        const head = el('div', 'note-entry-head');
+        head.append(el('time', 'note-entry-at', noteStamp(n.at)));
+        if (!n.legacy) {
+          const del = svgBtn('note-entry-del', ICONS.trash, 'حذف این ثبت');
+          del.addEventListener('click', async () => {
+            await Store.removeNote(t.id, n.id);
+            const fresh = (await Store.getTasks()).find(x => x.id === t.id);
+            await renderAll();
+            if (fresh) openNotePopover(anchor, fresh);
+            toast('ثبت حذف شد');
+          });
+          head.append(del);
+        }
+        item.append(head, el('p', 'note-entry-text', n.text));
+        log.append(item);
+      }
+      pop.append(log);
+    }
+
     const ta = el('textarea', 'note-pop-input');
-    ta.value = t.notes || ''; ta.rows = 4;
-    ta.placeholder = 'چی شد؟ نتیجه چی بود؟ هر توضیحی که خواستی…';
-    ta.setAttribute('aria-label', 'توضیحات کار');
+    ta.rows = 3;
+    ta.placeholder = entries.length ? 'توضیحِ تازه…' : 'چی شد؟ نتیجه چی بود؟ هر توضیحی که خواستی…';
+    ta.setAttribute('aria-label', 'توضیح تازه');
+    pop.append(ta);
+
+    const acts = el('div', 'note-pop-acts');
+    const save = el('button', 'btn btn-primary btn-sm', entries.length ? 'افزودن' : 'ذخیره');
+    const commit = async () => {
+      const v = ta.value.trim();
+      if (!v) { closePops(); return; }
+      await Store.addNote(t.id, v);
+      const fresh = (await Store.getTasks()).find(x => x.id === t.id);
+      await renderAll();
+      if (fresh) openNotePopover(anchor, fresh);   // باز بماند تا بشود پشت‌سرهم نوشت
+      toast('ثبت شد ✓');
+    };
+    save.addEventListener('click', commit);
+    // ⌘/Ctrl+Enter هم ثبت کند — دستِ کاربر از صفحه‌کلید درنیاید
+    ta.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commit(); }
+    });
+    acts.append(save);
+    pop.append(acts);
+    placePop(pop, anchor);
+    setTimeout(() => ta.focus(), 0);
+  }
+
+
+  const projById = id => cachedProjects.find(p => p.id === id) || null;
+  let openProjectId = null;   // پروندهٔ باز — null یعنی فهرستِ عادیِ کارها
+
+  function openProject(id) {
+    openProjectId = id;
+    goto('tasks');
+    renderTodoAsync();
+  }
+  function closeProject() {
+    openProjectId = null;
+    renderTodoAsync();
+  }
+
+  // فهرستِ مستقلِ پوشه‌ها — بالای هر دو نما، تا پروژه فقط از راه چیپِ یک کار
+  // پیدا نشود. حوزه‌ها با زیرمجموعه‌شان، و شمارِ کارِ باز.
+  function renderProjectBar() {
+    const bar = $('#projBar'), list = $('#projBarList');
+    if (!bar || !list) return;
+    if (openProjectId) { bar.hidden = true; return; }
+    const tree = Store.projectTree(cachedProjects, cachedTasks);
+    bar.hidden = false;
+    list.textContent = '';
+    if (!tree.length) {
+      list.append(el('p', 'hint', 'هنوز پوشه‌ای نساخته‌ای. کارها را در پوشه بگذار تا جلسه‌ها و آدم‌هایشان کنار هم بیایند.'));
+      return;
+    }
+    const stageFa = id => (Store.PROJECT_STAGES.find(x => x.id === id) || {}).name || '';
+    for (const root of tree) {
+      const card = el('button', 'proj-card proj-' + root.color);
+      const top = el('div', 'proj-card-top');
+      top.append(el('span', 'proj-dot'), el('b', null, root.name));
+      if (root.total) top.append(el('span', 'proj-card-n', J.faDigits(String(root.total))));
+      card.append(top);
+      const sub = el('div', 'proj-card-sub');
+      if (root.stage && root.stage !== 'active') sub.append(el('span', 'proj-card-stage', stageFa(root.stage)));
+      if (root.children.length) {
+        sub.append(el('span', null, root.children.map(c => c.name).join(' · ')));
+      } else if (!root.total) {
+        sub.append(el('span', null, 'بدون کارِ باز'));
+      }
+      if (sub.children.length) card.append(sub);
+      card.addEventListener('click', () => openProject(root.id));
+      list.append(card);
+    }
+  }
+
+  // پروندهٔ پروژه: جلسه، آدم، قول و کارِ بعدی — همه از دادهٔ موجود
+  async function renderProjectPage() {
+    const box = $('#projPage'), main = $('#tasksMain');
+    if (!box) return;
+    if (!openProjectId) { box.hidden = true; box.textContent = ''; if (main) main.hidden = false; return; }
+
+    const sessions = await Store.getSessions();
+    const d = Store.projectDossier(openProjectId, cachedProjects, cachedTasks, sessions);
+    if (!d) { openProjectId = null; box.hidden = true; if (main) main.hidden = false; return; }
+
+    box.hidden = false; if (main) main.hidden = true;
+    box.textContent = '';
+    const now = new Date();
+    const p = d.project;
+    const parent = p.parentId ? projById(p.parentId) : null;
+
+    // ── سربرگ ──
+    const head = el('div', 'proj-page-head');
+    const back = el('button', 'btn btn-ghost btn-sm proj-back', 'بازگشت به کارها');
+    back.addEventListener('click', closeProject);
+    head.append(back);
+
+    const titleWrap = el('div', 'proj-page-title');
+    if (parent) {
+      const up = el('button', 'proj-crumb', parent.name);
+      up.addEventListener('click', () => openProject(parent.id));
+      titleWrap.append(up, el('span', 'proj-crumb-sep', '›'));
+    }
+    titleWrap.append(el('h1', null, p.name));
+    head.append(titleWrap);
+
+    const stageSel = document.createElement('select');
+    stageSel.className = 'proj-stage';
+    stageSel.setAttribute('aria-label', 'مرحلهٔ پروژه');
+    for (const st of Store.PROJECT_STAGES) {
+      const o = el('option', null, st.name); o.value = st.id; stageSel.append(o);
+    }
+    stageSel.value = d.stage;
+    stageSel.addEventListener('change', async () => {
+      await Store.saveProject({ ...p, stage: stageSel.value });
+      await renderAll();
+      toast('مرحله: ' + (Store.PROJECT_STAGES.find(x => x.id === stageSel.value) || {}).name);
+    });
+    head.append(stageSel);
+    box.append(head);
+
+    // ── کارِ بعدی: تنها چیزی که واقعاً باید بدانی ──
+    const nextBox = el('div', 'proj-next' + (d.next ? '' : ' is-empty'));
+    nextBox.append(el('span', 'proj-next-label', 'کارِ بعدی'));
+    if (d.next) {
+      const b = el('button', 'proj-next-title', d.next.title);
+      b.addEventListener('click', () => { closeProject(); setTimeout(() => flash(d.next.id), 60); });
+      nextBox.append(b);
+      const why = Store.scoreReason(d.next, now);
+      if (why) nextBox.append(el('span', 'proj-next-why', why));
+      else if (d.next.due) nextBox.append(el('span', 'proj-next-why', J.relLabel(d.next.due, now)));
+    } else {
+      nextBox.append(el('span', 'proj-next-title is-none',
+        d.stalled ? 'کارِ بازی نمانده — تمامش کن یا کارِ تازه‌ای بگذار' : 'هنوز کاری اینجا نیست'));
+    }
+    box.append(nextBox);
+
+    // ── آمار ──
+    const stats = el('div', 'proj-stats');
+    const stat = (n, label, cls) => {
+      const s2 = el('div', 'proj-stat' + (cls ? ' ' + cls : ''));
+      s2.append(el('b', null, J.faDigits(String(n))), el('span', null, label));
+      stats.append(s2);
+    };
+    stat(d.counts.mine, 'کارِ من');
+    stat(d.counts.theirs, 'منتظرِ دیگران', d.counts.theirs ? 'is-warn' : '');
+    stat(d.counts.meetings, 'جلسه');
+    stat(d.counts.done, 'انجام‌شده');
+    box.append(stats);
+
+    // ── آدم‌ها ──
+    if (d.people.length) {
+      const sec = el('section', 'proj-sec');
+      sec.append(el('h2', 'proj-sec-h', 'آدم‌ها'));
+      const list = el('div', 'proj-people');
+      for (const per of d.people.slice(0, 12)) {
+        const days = per.lastAt ? Math.floor((now - new Date(per.lastAt)) / 86400000) : null;
+        const chip = el('button', 'proj-person' + (days != null && days > 14 ? ' is-cold' : ''));
+        chip.append(el('span', 'proj-person-name', per.name));
+        if (per.open) chip.append(el('span', 'proj-person-n', J.faDigits(String(per.open))));
+        chip.title = staleLabel(days);
+        chip.addEventListener('click', () => { closeProject(); goto('people'); });
+        list.append(chip);
+      }
+      sec.append(list);
+      box.append(sec);
+    }
+
+    // ── جلسه‌ها — قلبِ منشی، پس کاملاً کلیک‌پذیر ──
+    const msec = el('section', 'proj-sec');
+    const mh = el('h2', 'proj-sec-h', 'جلسه‌ها');
+    if (d.daysSinceMeeting != null) {
+      mh.append(el('span', 'proj-sec-note' + (d.daysSinceMeeting > 21 ? ' is-cold' : ''),
+        'آخرین: ' + (d.daysSinceMeeting === 0 ? 'امروز' : J.faDigits(String(d.daysSinceMeeting)) + ' روز پیش')));
+    }
+    msec.append(mh);
+    if (d.meetings.length) {
+      const ml = el('div', 'proj-meetings');
+      for (const sn of d.meetings.slice(0, 8)) {
+        const b = el('button', 'proj-meeting');
+        b.append(el('span', 'proj-meeting-title', sn.title || 'جلسهٔ بی‌عنوان'));
+        b.append(el('span', 'proj-meeting-date', sn.startedAt ? J.format(new Date(sn.startedAt), { weekday: false, year: false }) : ''));
+        const analyzed = !!(String(sn.summary || '').trim() || (sn.actions || []).length);
+        if (!analyzed) b.append(el('span', 'proj-meeting-tag', 'بدون صورت‌جلسه'));
+        b.addEventListener('click', () => { closeProject(); goto('meetings'); setTimeout(() => openSession(sn.id), 80); });
+        ml.append(b);
+      }
+      msec.append(ml);
+    } else {
+      msec.append(el('p', 'hint', 'هنوز جلسه‌ای به این پروژه وصل نیست. کارهایی که از جلسه‌ها می‌آیند خودشان اینجا می‌نشینند.'));
+    }
+    box.append(msec);
+
+    // ── کارها ──
+    const tsec = el('section', 'proj-sec');
+    tsec.append(el('h2', 'proj-sec-h', 'کارها'));
+    const wrap = el('div', 'todo-list');
+    if (d.tasks.mine.length) wrap.append(todoSection('کارِ من', sortTasks(d.tasks.mine, 'smart', now), 'today', now, false));
+    if (d.tasks.theirs.length) wrap.append(todoSection('منتظرِ دیگران', sortTasks(d.tasks.theirs, 'due', now), 'theirs', now, false));
+    if (d.tasks.done.length) wrap.append(todoSection('انجام‌شده', d.tasks.done.slice(0, 20), 'done', now, true));
+    if (!wrap.children.length) wrap.append(el('p', 'hint', 'کاری در این پروژه نیست.'));
+    tsec.append(wrap);
+    box.append(tsec);
+
+    // ── زیرپروژه‌ها ──
+    if (d.children.length) {
+      const csec = el('section', 'proj-sec');
+      csec.append(el('h2', 'proj-sec-h', 'زیرپروژه‌ها'));
+      const cl = el('div', 'proj-people');
+      for (const c of d.children) {
+        const b = el('button', 'proj-person');
+        b.append(el('span', 'proj-dot proj-' + c.color), el('span', 'proj-person-name', c.name));
+        b.addEventListener('click', () => openProject(c.id));
+        cl.append(b);
+      }
+      csec.append(cl);
+      box.append(csec);
+    }
+  }
+
+  // چیپِ پروژه — با نامِ حوزه‌اش، چون «فاز دو» به‌تنهایی معنا ندارد
+  function projChip(t) {
+    const p = projById(t.projectId);
+    if (!p) return null;
+    const par = p.parentId ? projById(p.parentId) : null;
+    const c = el('button', 'chip chip-proj proj-' + p.color);
+    c.append(el('span', 'proj-dot'));
+    c.append(document.createTextNode(par ? par.name + ' › ' + p.name : p.name));
+    c.title = 'بازکردن پروندهٔ پروژه';
+    c.addEventListener('click', e => { e.stopPropagation(); openProject(p.id); });
+    return c;
+  }
+
+  // انتخابگرِ مشترکِ پروژه — هم برای کار، هم برای جلسه.
+  // onPick(projectId|null) تصمیم می‌گیرد کجا بنشیند.
+  function openProjectPickerFor(anchor, currentId, onPick, headText) {
+    closePops();
+    const pop = el('div', 'resched-pop proj-pop');
+    pop.append(el('div', 'resched-head', headText || 'پروژه'));
+    const list = el('div', 'proj-list');
+    const opt = (p, depth) => {
+      const b = el('button', 'proj-opt' + (currentId === p.id ? ' is-on' : '') + (depth ? ' is-child' : ''));
+      b.append(el('span', 'proj-dot proj-' + p.color), el('span', null, p.name));
+      b.addEventListener('click', async () => { closePops(); await onPick(p); });
+      list.append(b);
+    };
+    for (const root of Store.projectTree(cachedProjects, cachedTasks)) {
+      opt(root, 0);
+      for (const kid of root.children) opt(kid, 1);
+    }
+    if (currentId) {
+      const none = el('button', 'proj-opt proj-none');
+      none.append(el('span', 'proj-dot proj-empty'), el('span', null, 'بدون پروژه'));
+      none.addEventListener('click', async () => { closePops(); await onPick(null); });
+      list.append(none);
+    }
+    if (list.children.length) pop.append(list);
+    else pop.append(el('p', 'hint', 'هنوز پروژه‌ای نساخته‌ای. نامش را همین‌جا بنویس.'));
+
+    const form = el('form', 'proj-add');
+    const inp = el('input', 'proj-add-input');
+    inp.placeholder = 'پروژهٔ تازه…'; inp.maxLength = 60;
+    inp.setAttribute('aria-label', 'نام پروژهٔ تازه');
+    form.append(inp, svgBtn('proj-add-btn', ICONS.plus, 'ساختن و انتقال'));
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const v = inp.value.trim(); if (!v) return;
+      const p = await Store.saveProject({ name: v });
+      if (!p) return;
+      closePops();
+      await onPick(p);
+    });
+    pop.append(form);
+    placePop(pop, anchor);
+    setTimeout(() => { if (!list.children.length) inp.focus(); }, 0);
+  }
+
+  // انتخاب پروژه برای یک جلسه
+  function openSessionProjectPicker(anchor, session) {
+    const cur = Store.sessionProject(session, cachedTasks);
+    openProjectPickerFor(anchor, cur.explicit ? cur.id : null, async p => {
+      await Store.setSessionProject(session.id, p ? p.id : null);
+      await renderAll();
+      await openSession(session.id);
+      toast(p ? 'جلسه به «' + p.name + '» رفت' : 'نسبتِ پروژه برداشته شد');
+    }, 'این جلسه برای کدام پروژه است؟');
+  }
+
+  // انتخاب پروژه برای یک کار — درخت با تورفتگی، به‌علاوهٔ ساختِ سریع
+  function openProjectPicker(anchor, t) {
+    closePops();
+    const pop = el('div', 'resched-pop proj-pop');
+    pop.append(el('div', 'resched-head', 'پروژه'));
+    const list = el('div', 'proj-list');
+
+    const opt = (p, depth) => {
+      const b = el('button', 'proj-opt' + (t.projectId === p.id ? ' is-on' : '') + (depth ? ' is-child' : ''));
+      b.append(el('span', 'proj-dot proj-' + p.color), el('span', null, p.name));
+      b.addEventListener('click', async () => {
+        closePops();
+        await Store.setTaskProject(t.id, p.id);
+        await renderAll();
+        toast('به «' + p.name + '» رفت');
+      });
+      list.append(b);
+    };
+    for (const root of Store.projectTree(cachedProjects, cachedTasks)) {
+      opt(root, 0);
+      for (const kid of root.children) opt(kid, 1);
+    }
+    if (t.projectId) {
+      const none = el('button', 'proj-opt proj-none');
+      none.append(el('span', 'proj-dot proj-empty'), el('span', null, 'بدون پروژه'));
+      none.addEventListener('click', async () => {
+        closePops();
+        await Store.setTaskProject(t.id, null);
+        await renderAll();
+        toast('از پروژه بیرون آمد');
+      });
+      list.append(none);
+    }
+    if (list.children.length) pop.append(list);
+    else pop.append(el('p', 'hint', 'هنوز پروژه‌ای نساخته‌ای. نامش را همین‌جا بنویس.'));
+
+    const form = el('form', 'proj-add');
+    const inp = el('input', 'proj-add-input');
+    inp.placeholder = 'پروژهٔ تازه…'; inp.maxLength = 60;
+    inp.setAttribute('aria-label', 'نام پروژهٔ تازه');
+    const add = svgBtn('proj-add-btn', ICONS.plus, 'ساختن و انتقال');
+    form.append(inp, add);
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const v = inp.value.trim(); if (!v) return;
+      const p = await Store.saveProject({ name: v });
+      if (!p) return;
+      closePops();
+      await Store.setTaskProject(t.id, p.id);
+      await renderAll();
+      toast('پروژهٔ «' + p.name + '» ساخته شد');
+    });
+    pop.append(form);
+    placePop(pop, anchor);
+    setTimeout(() => { if (!list.children.length) inp.focus(); }, 0);
+  }
+
+  // اولویت — چهار حالت، با امکانِ برداشتن. رنگ تنها نشانه نیست: متن هم هست.
+  function openPriority(anchor, t) {
+    closePops();
+    const pop = el('div', 'resched-pop prio-pop');
+    pop.append(el('div', 'resched-head', 'اولویت'));
+    for (const p of [3, 2, 1, 0]) {
+      const b = el('button', 'prio-opt prio-' + p + (t.priority === p ? ' is-on' : ''));
+      b.append(el('span', 'prio-dot'), el('span', null, p ? 'اولویت ' + Store.PRIORITY_FA[p] : 'بدون اولویت'));
+      b.addEventListener('click', async () => {
+        closePops();
+        await Store.updateTask(t.id, { priority: p });
+        await renderAll();
+        toast(p ? 'اولویت: ' + Store.PRIORITY_FA[p] : 'اولویت برداشته شد');
+      });
+      pop.append(b);
+    }
+    placePop(pop, anchor);
+  }
+
+  // چیپِ اولویت — در فهرست و کانبان یکی است
+  function prioChip(t) {
+    const c = el('span', 'chip chip-prio prio-' + t.priority);
+    c.append(el('span', 'prio-dot'), document.createTextNode(Store.PRIORITY_FA[t.priority]));
+    c.title = 'اولویت ' + Store.PRIORITY_FA[t.priority];
+    return c;
+  }
+
+  // توضیحِ زیرکار — همان الگوی توضیحِ کار، ولی روی یک زیرکار.
+  // عنوانِ زیرکار در سربرگ می‌آید تا معلوم باشد کدام یکی را ویرایش می‌کنی.
+  function openSubNotePopover(anchor, t, s) {
+    closePops();
+    const pop = el('div', 'resched-pop note-pop');
+    pop.append(el('div', 'resched-head', 'توضیحِ زیرکار: ' + s.title));
+    const ta = el('textarea', 'note-pop-input');
+    ta.value = s.note || ''; ta.rows = 4;
+    ta.placeholder = 'چطور باید انجام بشه؟ چه چیزی لازم داری؟';
+    ta.setAttribute('aria-label', 'توضیح زیرکار ' + s.title);
     pop.append(ta);
     const acts = el('div', 'note-pop-acts');
     const save = el('button', 'btn btn-primary btn-sm', 'ذخیره');
-    save.addEventListener('click', async () => { closePops(); await Store.updateTask(t.id, { notes: ta.value }); await renderAll(); toast('توضیحات ذخیره شد ✓'); });
+    save.addEventListener('click', async () => {
+      closePops();
+      await Store.updateSubtask(t.id, s.id, { note: ta.value });
+      await renderAll();
+      toast('توضیح ذخیره شد ✓');
+    });
     acts.append(save);
     pop.append(acts);
     placePop(pop, anchor);
@@ -1943,6 +2386,9 @@
   let kanDragId = null;
 
   function renderTasksView() {
+    // پروندهٔ باز جای کلِ نمای کارها را می‌گیرد؛ تعویضِ فهرست/برد نباید گمش کند
+    if (openProjectId) { renderProjectPage(); renderProjectBar(); return; }
+    renderProjectBar();
     const isBoard = tasksView === 'board';
     $('#taskListWrap').hidden = isBoard;
     $('#taskBoard').hidden = !isBoard;
@@ -2008,10 +2454,54 @@
       tc.append(el('span', 'todo-tag-hash', '#'), document.createTextNode(tag));
       chips.append(tc);
     }
+    if (t.projectId) { const pc = projChip(t); if (pc) chips.append(pc); }
+    if (t.priority && !done) chips.append(prioChip(t));
+    if (t.who) chips.append(el('span', 'chip chip-who', t.who));
+    if (t.recur && !done) {
+      const rc = el('span', 'chip chip-recur'); rc.innerHTML = ICONS.repeat;
+      rc.append(document.createTextNode(DateParser.recurLabel(t.recur))); chips.append(rc);
+    }
+    if (t.estimate && !done) {
+      const ec = el('span', 'chip chip-est'); ec.innerHTML = ICONS.hourglass;
+      ec.append(document.createTextNode(' ' + humanDur(t.estimate)));
+      ec.title = 'زمانِ لازم — برای جاکردن در وقت آزادِ روز';
+      chips.append(ec);
+    }
     if (t.source === 'monshi' || t.meetingRef) chips.append(meetingChip(t));
     if (chips.children.length) card.append(chips);
+
+    // زیرکارها در کانبان اصلاً دیده نمی‌شدند. نوارِ پیشرفت + همان پنلِ فهرست،
+    // با همان expandedSubs — پس باز/بستهٔ یک کار در هر دو نما یکی است.
+    const subs = t.subtasks || [];
+    if (subs.length) {
+      const doneN = subs.filter(x => x.done).length;
+      const open = expandedSubs.has(t.id);
+      const bar = el('button', 'kc-subs' + (doneN === subs.length ? ' is-full' : ''));
+      bar.setAttribute('aria-expanded', String(open));
+      bar.setAttribute('aria-label', `زیرکارها: ${J.faDigits(doneN)} از ${J.faDigits(subs.length)}`);
+      const ic = el('span', 'kc-subs-ic'); ic.innerHTML = ICONS.branch;
+      const track = el('span', 'kc-subs-track');
+      const fill = el('span', 'kc-subs-fill');
+      fill.style.width = Math.round(doneN / subs.length * 100) + '%';
+      track.append(fill);
+      bar.append(ic, track, el('span', 'kc-subs-n', `${J.faDigits(doneN)}/${J.faDigits(subs.length)}`));
+      bar.addEventListener('click', () => { toggleSubs(t.id); });
+      card.append(bar);
+      if (open && !done) card.append(renderSubPanel(t));
+    }
+
     if (t.notes) card.append(el('div', 'kanban-card-note', t.notes));
     const foot = el('div', 'kanban-card-foot');
+    const projB = svgBtn('kc-act' + (t.projectId ? ' is-on' : ''), ICONS.folder,
+      t.projectId ? 'پروژه: ' + ((projById(t.projectId) || {}).name || '—') : 'انتقال به پروژه');
+    projB.addEventListener('click', () => openProjectPicker(projB, t));
+    const prioB = svgBtn('kc-act' + (t.priority ? ' is-on' : ''), ICONS.flag,
+      t.priority ? 'اولویت: ' + Store.PRIORITY_FA[t.priority] : 'تعیین اولویت');
+    prioB.addEventListener('click', () => openPriority(prioB, t));
+    const pinB = svgBtn('kc-act' + (t.pinned ? ' is-on' : ''), ICONS.pin, t.pinned ? 'برداشتن سنجاق' : 'سنجاق به بالا');
+    pinB.addEventListener('click', async () => { await Store.updateTask(t.id, { pinned: !t.pinned }); await renderAll(); });
+    const subB = svgBtn('kc-act', ICONS.branch, 'زیرکار');
+    subB.addEventListener('click', async () => { expandedSubs.add(t.id); await renderAll(); });
     const noteB = svgBtn('kc-act' + (t.notes ? ' is-on' : ''), ICONS.note, t.notes ? 'توضیحات' : 'افزودن توضیح');
     noteB.addEventListener('click', () => openNotePopover(noteB, t));
     const delB = svgBtn('kc-act kc-del', ICONS.trash, 'حذف');
@@ -2020,7 +2510,7 @@
       await renderAll();
       toast('حذف شد', async () => { await Store.restoreTask(removed); renderAll(); });
     });
-    foot.append(noteB, delB);
+    foot.append(projB, prioB, pinB, subB, noteB, delB);
     card.append(foot);
     return card;
   }
@@ -2121,8 +2611,10 @@
   $('#tqPersonBtn').addEventListener('click', async () => {
     if (tqPerson) { tqPerson = null; paintTqLinks(); return; }
     closePops();
-    const [tasks, evc, meta] = await Promise.all([Store.getTasks(), Store.getEvents(), Store.getPeopleMeta()]);
-    const people = Store.peopleFiles(tasks, new Date(), evc.events, meta);
+    const [tasks, evc, meta, sessions, settings] = await Promise.all([
+      Store.getTasks(), Store.getEvents(), Store.getPeopleMeta(), Store.getSessions(), Store.getSettings()]);
+    const people = Store.peopleFiles(tasks, new Date(), evc.events, meta, sessions,
+      { name: settings.userName || '', email: settings.userEmail || '' });
     const pop = el('div', 'resched-pop');
     pop.append(el('div', 'resched-head', 'وصل به کدام نفر؟'));
     if (!people.length) pop.append(el('div', 'resched-empty', 'هنوز کسی در «آدم‌ها» نیست'));
@@ -3017,26 +3509,7 @@
 
   // ── سریِ جلسه‌ها (M‑۴) ──────────────────────────────
   // عنوان را برای تشخیصِ سری نرمال می‌کند: شماره، تاریخ و کلمات تکرارشونده را برمی‌دارد
-  function seriesKey(title) {
-    const base = (title || '')
-      .replace(/[‌‏ً-ْٔ]/g, '')              // نیم‌فاصله و اعراب/همزهٔ رویِ حرف
-      .replace(/[#(){}[\]\-–—_.:،,]/g, ' ')
-      .replace(/[0-9۰-۹٠-٩]+/g, ' ')        // ارقامِ لاتین، فارسی و عربی
-      .toLowerCase();
-    // واژه‌های عمومی حذف می‌شوند؛ ولی اگر چیزی نماند، خودِ عنوان ملاک است
-    const stripped = base
-      .replace(/(هفتگی|روزانه|ماهانه|جلسه|نشست|weekly|daily|monthly|sync|meeting|call)/gi, ' ')
-      .replace(/\s+/g, '').trim();
-    return stripped || base.replace(/\s+/g, '').trim();
-  }
   // همهٔ نشست‌های هم‌سری، جدیدترین اول
-  function sessionSeries(s, sessions) {
-    const k = seriesKey(s.title);
-    if (!k) return [s];
-    return (sessions || [])
-      .filter(o => seriesKey(o.title) === k)
-      .sort(byNewest);
-  }
   // وضعیتِ یک اقدامِ جلسه: به کارها رفته؟ انجام شده؟
   let allTasksCache = [];
   function actionStatus(a, session, tasks) {
@@ -3088,6 +3561,34 @@
       meta.append(el('span', 'meta-tokens dot-sep', `${fmtInt(s.analysisUsage.total)} توکن`));
     }
     box.append(meta);
+
+    // پروژهٔ جلسه: یا صریح، یا از پروژهٔ کارهایی که از همین جلسه آمده‌اند.
+    // حالتِ مشتق با خط‌چین نشان داده می‌شود تا معلوم باشد حدس است نه نسبتِ ثبت‌شده.
+    {
+      const sp = Store.sessionProject(s, cachedTasks);
+      const proj = sp.id ? projById(sp.id) : null;
+      const row = el('div', 'detail-proj');
+      const btn = el('button', 'chip chip-proj' + (proj ? ' proj-' + proj.color : ' is-none')
+        + (proj && !sp.explicit ? ' is-derived' : ''));
+      btn.append(el('span', 'proj-dot'));
+      if (proj) {
+        const par = proj.parentId ? projById(proj.parentId) : null;
+        btn.append(document.createTextNode(par ? par.name + ' › ' + proj.name : proj.name));
+        btn.title = sp.explicit ? 'پروژهٔ این جلسه — برای تغییر کلیک کن'
+          : 'از روی کارهای این جلسه حدس زده شده — برای ثبتِ قطعی کلیک کن';
+      } else {
+        btn.append(document.createTextNode('بدون پروژه'));
+        btn.title = 'این جلسه برای کدام پروژه است؟';
+      }
+      btn.addEventListener('click', () => openSessionProjectPicker(btn, s));
+      row.append(btn);
+      if (proj) {
+        const go = el('button', 'btn-link detail-proj-go', 'پروندهٔ پروژه');
+        go.addEventListener('click', () => openProject(proj.id));
+        row.append(go);
+      }
+      box.append(row);
+    }
 
     // شرکت‌کننده‌ها (از رویداد تقویم + گوینده‌های زیرنویس)؛ ایمیل روی نگه‌داشتن نشانگر
     const parts = await participantsOf(s);
@@ -3831,14 +4332,6 @@
   }
 
   // ---------- پروندهٔ آدم‌ها ----------
-  function staleLabel(days) {
-    if (days == null) return 'بدون سابقهٔ تماس';
-    if (days <= 0) return 'آخرین تماس: امروز';
-    if (days === 1) return 'آخرین تماس: دیروز';
-    if (days < 7) return `آخرین تماس: ${J.faDigits(days)} روز پیش`;
-    if (days < 30) return `آخرین تماس: ${J.faDigits(Math.floor(days / 7))} هفته پیش`;
-    return `آخرین تماس: ${J.faDigits(Math.floor(days / 30))} ماه پیش`;
-  }
 
   function personCard(p, now, sessions, allPeople) {
     const card = el('div', 'person-card');
@@ -3854,6 +4347,13 @@
       dup.title = 'فردِ دیگری با همین نام هست — با ایمیل از هم جدا می‌شوند';
       nameRow.append(dup);
     }
+    // نامِ تنها، وقتی همان نام چند ایمیل دارد: ممکن است این کارت چند نفر باشد
+    if (p.ambiguous) {
+      const amb = el('span', 'person-dup is-amb', 'شاید چند نفر');
+      amb.title = 'این پرونده فقط روی نام ایستاده، ولی همین نام چند ایمیل دارد. '
+        + 'جلسه‌های این کارت ممکن است مالِ چند نفرِ هم‌نام باشد — از «ادغام» برای مرتب‌کردنشان استفاده کن.';
+      nameRow.append(amb);
+    }
     info.append(nameRow);
     if (p.email) {
       const mail = el('a', 'person-email', p.email);
@@ -3864,7 +4364,9 @@
     stats.append(el('span', null, `${J.faDigits(p.open.length)} باز`));
     if (p.done) stats.append(el('span', null, `${J.faDigits(p.done)} انجام‌شده`));
     if (p.overdue) stats.append(el('span', 'warn', `${J.faDigits(p.overdue)} عقب‌افتاده`));
-    if (p.meetings.length) stats.append(el('span', null, `${J.faDigits(p.meetings.length)} جلسه`));
+    // جلسه‌های واقعی (متن‌دار) + رویدادهای تقویمی که جلسه‌ای برایشان ثبت نشده
+    const metTotal = personMeetings(p, sessions).length;
+    if (metTotal) stats.append(el('span', null, `${J.faDigits(metTotal)} جلسه`));
     info.append(stats);
     head.append(info);
     card.append(head);
@@ -3911,8 +4413,11 @@
     const mtgs = personMeetings(p, sessions);
     if (mtgs.length) {
       const mw = el('div', 'person-meetings');
-      mw.append(el('div', 'person-meetings-title', `جلسه‌ها با ${p.name}`));
-      for (const m of mtgs) {
+      const head = el('div', 'person-meetings-title');
+      head.append(el('span', null, `جلسه‌ها با ${p.name}`));
+      head.append(el('span', 'person-meetings-n', J.faDigits(String(mtgs.length))));
+      mw.append(head);
+      const meetingRow = m => {
         const row = el('button', 'person-meeting');
         const ic = el('span', 'person-meeting-ic'); ic.innerHTML = ICONS.video;
         row.append(ic);
@@ -3920,10 +4425,24 @@
         body.append(el('span', 'person-meeting-title', m.title));
         if (m.date) body.append(el('span', 'person-meeting-date', J.relLabel(J.iso(m.date), now)));
         row.append(body);
-        if (m.recorded) { const b = el('span', 'person-meeting-badge', 'صورت‌جلسه'); row.append(b); }
-        row.title = m.recorded ? 'باز کردن صورت‌جلسه' : 'رفتن به جلسه';
+        // نشان فقط وقتی صورت‌جلسه واقعاً هست — جلسهٔ ضبط‌شدهٔ تحلیل‌نشده هم داریم
+        if (m.analyzed) row.append(el('span', 'person-meeting-badge', 'صورت‌جلسه'));
+        row.title = m.recorded ? 'باز کردن جلسه' : 'رفتن به جلسه';
         row.addEventListener('click', m.act);
-        mw.append(row);
+        return row;
+      };
+
+      // بلندترین فهرست هم نباید کارت را بی‌انتها کند؛ بقیه پشت یک کلیک
+      const FIRST = 6;
+      for (const m of mtgs.slice(0, FIRST)) mw.append(meetingRow(m));
+      if (mtgs.length > FIRST) {
+        const rest = mtgs.length - FIRST;
+        const more = el('button', 'person-more', `${J.faDigits(String(rest))} جلسهٔ دیگر`);
+        more.addEventListener('click', () => {
+          more.remove();
+          for (const m of mtgs.slice(FIRST)) mw.append(meetingRow(m));
+        });
+        mw.append(more);
       }
       card.append(mw);
     }
@@ -3970,28 +4489,46 @@
   }
 
   // جلسه‌های یک نفر: جلسه‌های ضبط‌شده (منشی) + رویدادهای تقویم، یکتا و مرتب بر اساس زمان
+  // جلسه‌های یک نفر. تطبیقِ نام اینجا انجام نمی‌شود — Store.peopleFiles قبلاً
+  // با کلیدِ یکسان‌شده انجامش داده. تطبیقِ زیررشته‌ایِ قبلی «رضا» را به «علیرضا»
+  // هم می‌چسباند و «مصطفي» را به «مصطفی» نمی‌چسباند؛ هر دو غلط بود.
   function personMeetings(p, sessions) {
-    const items = [], seen = new Set();
-    const match = n => n && (n === p.name || n.includes(p.name) || p.name.includes(n));
-    for (const s of sessions || []) {
-      let names = (s.participants || []).map(x => x.name);
-      if (!names.length) names = (s.transcript || []).map(r => typeof r.speaker === 'string' ? r.speaker : '');
-      if (!names.some(match)) continue;
-      const k = normTitle(s.title); if (seen.has(k)) continue; seen.add(k);
-      items.push({ title: s.title || 'جلسه', date: s.startedAt ? new Date(s.startedAt) : null, recorded: true, act: () => openMeetingById(s.id) });
+    const byId = new Map();
+    for (const s of sessions || []) if (s && s.id) byId.set(s.id, s);
+    const items = [];
+    // کلیدِ «همان رویداد»: عنوانِ یکسان‌شده + همان روز. عنوانِ تنها کافی نیست،
+    // وگرنه جلسهٔ هفتگیِ تکرارشونده یک جلسه شمرده می‌شود.
+    const seen = new Set();
+    const dayKey = (title, d) => normTitle(title) + '|' + (d ? J.iso(d) : '');
+
+    for (const ref of p.sessions || []) {
+      const s = byId.get(ref.id);
+      const date = ref.at ? new Date(ref.at) : null;
+      seen.add(dayKey(ref.title, date));
+      items.push({
+        title: ref.title, date, recorded: true,
+        analyzed: !!(s && (String(s.summary || '').trim() || (s.actions || []).length)),
+        act: () => openMeetingById(ref.id)
+      });
     }
+    // رویدادِ تقویمی که جلسهٔ ضبط‌شده‌اش هست، دوباره نشان داده نمی‌شود
     for (const ev of p.meetings || []) {
-      const k = normTitle(ev.title); if (seen.has(k)) continue; seen.add(k);
-      items.push({ title: ev.title, date: new Date(ev.start), recorded: false, act: () => goToMeeting(ev) });
+      const d = new Date(ev.start);
+      const k = dayKey(ev.title, d);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      items.push({ title: ev.title, date: d, recorded: false, analyzed: false, act: () => goToMeeting(ev) });
     }
     items.sort((a, b) => (b.date ? b.date.getTime() : 0) - (a.date ? a.date.getTime() : 0));
-    return items.slice(0, 6);
+    return items;
   }
 
   async function renderPeople() {
-    const [tasks, evc, meta, sessions] = await Promise.all([Store.getTasks(), Store.getEvents(), Store.getPeopleMeta(), Store.getSessions()]);
+    const [tasks, evc, meta, sessions, settings] = await Promise.all([
+      Store.getTasks(), Store.getEvents(), Store.getPeopleMeta(), Store.getSessions(), Store.getSettings()]);
     const now = new Date();
-    const people = Store.peopleFiles(tasks, now, evc.events, meta);
+    const people = Store.peopleFiles(tasks, now, evc.events, meta, sessions,
+      { name: settings.userName || '', email: settings.userEmail || '' });
     const grid = $('#peopleGrid');
     grid.replaceChildren();
     if (!people.length) {
@@ -4480,6 +5017,809 @@
     toast('تقویم به‌روز شد');
   });
 
+  // ---------- پل هوش مصنوعی ----------
+  // دو مسیر برای یک هدف: مدلِ خودِ کاربر دادهٔ منشی را بخواند.
+  //   «کپیِ زمینه»  — بدون نصب، در هر چت‌باتی. برای همه.
+  //   «فایل snapshot» — برای سرور MCP و ابزارهای دسکتاپی.
+  // هیچ‌کدام درخواست شبکه‌ای ندارند: یکی در کلیپ‌بورد می‌نشیند، دیگری روی دیسک.
+
+  const SNAP_DB = 'manshi-bridge', SNAP_STORE = 'handles', SNAP_KEY = 'dir';
+  const hasFS = typeof window.showDirectoryPicker === 'function';
+
+  function idbOpen() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open(SNAP_DB, 1);
+      r.onupgradeneeded = () => r.result.createObjectStore(SNAP_STORE);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  }
+  function idbDo(mode, fn) {
+    return idbOpen().then(db => new Promise((res, rej) => {
+      const tx = db.transaction(SNAP_STORE, mode);
+      const out = fn(tx.objectStore(SNAP_STORE));
+      tx.oncomplete = () => { db.close(); res(out && out.result !== undefined ? out.result : null); };
+      tx.onerror = () => { db.close(); rej(tx.error); };
+    }));
+  }
+  const dirSave = h => idbDo('readwrite', st => st.put(h, SNAP_KEY));
+  const dirLoad = () => idbDo('readonly', st => st.get(SNAP_KEY));
+
+  // اجازهٔ فایل بعد از بسته‌شدنِ مرورگر به «prompt» برمی‌گردد و فقط با کلیکِ
+  // کاربر بازمی‌گردد. پس در مسیرِ خودکار هرگز ask نمی‌دهیم — بی‌سروصدا رد می‌شویم.
+  async function bridgeDir(ask) {
+    const h = await dirLoad().catch(() => null);
+    if (!h) return null;
+    let p = await h.queryPermission({ mode: 'readwrite' });
+    if (p !== 'granted' && ask) p = await h.requestPermission({ mode: 'readwrite' });
+    return p === 'granted' ? h : null;
+  }
+
+  async function snapshotNow(mode) {
+    const [sessions, tasks, people] = await Promise.all([
+      Store.getSessions(), Store.getTasks(), Store.getPeopleMeta()
+    ]);
+    return Snapshot.buildSnapshot({ sessions, tasks, people }, { mode });
+  }
+
+  let writingSnap = false;
+  async function writeSnapshotFile(ask) {
+    if (writingSnap) return 'busy';
+    const s = await Store.getSettings();
+    if (!s.bridgeOn) return 'off';
+    const dir = await bridgeDir(ask);
+    if (!dir) return 'no-permission';
+    writingSnap = true;
+    try {
+      const snap = await snapshotNow(s.bridgeMode);
+      const fh = await dir.getFileHandle('snapshot.json', { create: true });
+      const w = await fh.createWritable();
+      await w.write(JSON.stringify(snap, null, 2));
+      await w.close();
+      await Store.saveSettings({ bridgeWroteAt: Date.now() });
+      return 'ok';
+    } finally { writingSnap = false; }
+  }
+
+  function stamp(ts) {
+    if (!ts) return 'هنوز نوشته نشده';
+    const d = new Date(ts);
+    return 'آخرین نوشتن: ' + J.format(d, { weekday: false, year: false })
+      + '، ساعت ' + d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // ── راهنمای وصل‌کردن پل ──────────────────────────
+  // مسیرِ پوشه از showDirectoryPicker درنمی‌آید، پس یک بار از کاربر می‌گیریم —
+  // هم برای ساختنِ تنظیماتِ دقیق، هم برای هشدارِ پوشهٔ همگام‌شونده.
+  const SETUP_JOBS = [
+    { id: 'catchup', name: 'صورت‌جلسه‌های عقب‌افتاده را بساز',
+      ask: 'پنج جلسهٔ اولی که صورت‌جلسه ندارند را با list_meetings پیدا کن، متن هرکدام را با '
+        + 'get_meeting بخوان، و برای هرکدام خلاصه و کارها را با write_minutes ثبت کن. '
+        + 'جلسه‌هایی که متنشان خیلی کوتاه است را رد کن.' },
+    { id: 'one', name: 'یک جلسهٔ مشخص را صورت‌جلسه کن',
+      ask: 'با list_meetings جلسه‌های بدون صورت‌جلسه را نشانم بده تا یکی را انتخاب کنم، '
+        + 'بعد متنش را بخوان و صورت‌جلسه‌اش را با write_minutes ثبت کن.' },
+    { id: 'search', name: 'در جلسه‌ها بگرد',
+      ask: 'در جلسه‌های من بگرد و بگو دربارهٔ [موضوع] چه گفته شده، کِی، و چه تصمیمی گرفته شد. '
+        + 'برای هر نکته بگو از کدام جلسه است.' },
+    { id: 'brief', name: 'برای جلسه با یک نفر آماده‌ام کن',
+      ask: 'همهٔ جلسه‌ها و کارهای مربوط به [نام شخص] را نگاه کن و یک بریفِ کوتاه بنویس: '
+        + 'آخرین چیزهایی که گفته شد، قول‌های انجام‌نشده، و سه سؤالی که بهتر است بپرسم.' },
+    { id: 'weekly', name: 'گزارش هفته را بنویس',
+      ask: 'جلسه‌ها و کارهای هفت روز گذشته را نگاه کن و یک گزارش هفتگی بنویس: چه پیش رفت، '
+        + 'چه عقب ماند، چه ریسکی برای هفتهٔ بعد هست.' }
+  ];
+  let setupJob = SETUP_JOBS[0];
+
+  // سیستم‌عامل را حدس می‌زنیم ولی قفلش نمی‌کنیم — ممکن است کسی روی مک بنشیند و
+  // تنظیمات را برای همکارِ ویندوزی‌اش بسازد.
+  const OS_FA = { mac: 'مک', win: 'ویندوز', linux: 'لینوکس' };
+  function guessOS() {
+    const p = ((navigator.userAgentData && navigator.userAgentData.platform)
+      || navigator.platform || navigator.userAgent || '').toLowerCase();
+    if (p.includes('win')) return 'win';
+    if (p.includes('linux') || p.includes('android')) return 'linux';
+    return 'mac';
+  }
+  let setupOS = guessOS();
+
+  function fillSelect(sel, rows, labelOf) {
+    if (!sel || sel.childElementCount) return;
+    for (const r of rows) {
+      const o = el('option', null, labelOf(r));
+      o.value = r.id; sel.append(o);
+    }
+  }
+
+  // قدم‌های تأییدشده در تنظیمات می‌مانند تا با هر باز شدن دوباره از صفر شروع نشود.
+  let setupFlags = {};
+  const STEP_FA = {
+    node: 'Node', path: 'مسیر پوشه', config: 'تنظیمات',
+    restart: 'باز کردن ابزار', ask: 'اولین درخواست'
+  };
+
+  async function saveStep(id, on) {
+    setupFlags = { ...setupFlags, [id]: !!on };
+    await Store.saveSettings({ bridgeSteps: setupFlags });
+    paintSetup();
+  }
+
+  function paintProgress(hasPath) {
+    const p = Snapshot.setupProgress({ ...setupFlags, path: hasPath });
+    const bar = $('#setupProgress');
+    if (bar) {
+      bar.textContent = p.complete
+        ? 'همه‌چیز آماده است ✓'
+        : J.faDigits(String(p.done)) + ' از ' + J.faDigits(String(p.total)) + ' قدم';
+      bar.className = 'setup-progress' + (p.complete ? ' is-done' : '');
+    }
+    // هر شماره: انجام‌شده، همین‌الان، یا هنوز نه
+    document.querySelectorAll('#bridgeSetup .setup-n[data-step]').forEach(n => {
+      const id = n.dataset.step;
+      const done = p.states[id];
+      n.classList.toggle('is-done', done);
+      n.classList.toggle('is-now', !done && id === p.next);
+      n.setAttribute('title', STEP_FA[id] + (done ? ' — انجام شد' : ' — هنوز نه'));
+      if (done && !n.dataset.orig) { n.dataset.orig = n.textContent; n.textContent = '✓'; }
+      if (!done && n.dataset.orig) { n.textContent = n.dataset.orig; delete n.dataset.orig; }
+    });
+    return p;
+  }
+
+  function paintSetup() {
+    const box = $('#bridgeSetup');
+    if (!box) return;
+    const data = $('#setupData').value.trim();
+    paintProgress(!!data);
+    const repo = $('#setupRepo').value.trim() || '~/manshi-suite';
+    // جداکننده را از خودِ مسیر بگیر، نه از سیستم‌عاملِ انتخابی — وگرنه مسیر
+    // مخلوط می‌شود (C:\…\manshi/mcp/…) که کار می‌کند ولی غلط به نظر می‌رسد.
+    const sep = repo.includes('\\') && !repo.includes('/') ? '\\' : '/';
+    const script = repo.replace(/[\\/]+$/, '') + sep + ['mcp', 'manshi-mcp.js'].join(sep);
+
+    // آگاه‌سازی، نه منع. اگر کسی آگاهانه iCloud می‌خواهد، حقِ خودش است.
+    const risk = Snapshot.pathRisk(data);
+    const rEl = $('#setupRisk');
+    rEl.hidden = risk.level === 'none';
+    rEl.className = 'setup-risk is-' + risk.level;
+    rEl.textContent = risk.text;
+
+    const tool = Snapshot.TOOLS.find(t => t.id === $('#setupTool').value) || Snapshot.TOOLS[0];
+    setupOS = $('#setupOS').value;
+    const nodePath = $('#setupNode').value.trim();
+
+    $('#setupNodeCmd').textContent = Snapshot.nodeFinder(setupOS);
+    const nWarn = $('#setupNodeWarn');
+    nWarn.hidden = !Snapshot.nodeIsBare(nodePath);
+    nWarn.textContent = nodePath
+      ? 'این مسیرِ کامل نیست. خروجیِ ' + Snapshot.nodeFinder(setupOS) + ' چیزی مثل /usr/local/bin/node است.'
+      : 'خالی است — تنظیمات با «node»ِ خالی ساخته می‌شود و ممکن است اپ‌های دسکتاپ پیدایش نکنند.';
+
+    // پوشهٔ برنامه و پوشهٔ داده دو چیزند؛ یکی‌بودنشان خطای رایج است
+    const clash = Snapshot.pathClash($('#setupRepo').value, data);
+    $('#setupRepoWarn').hidden = !clash;
+    $('#setupRepoWarn').textContent = clash;
+
+    // دستورِ رسمیِ ابزار، اگر دارد. همیشه بر ویرایشِ دستی مقدم است.
+    const cli = tool.cli ? Snapshot.cliSnippet(tool.id, script, data, setupOS, nodePath) : '';
+    $('#setupCliBox').hidden = !cli;
+    if (cli) $('#setupCli').textContent = cli;
+    // وقتی راهِ آسان نیست، راهِ دستی نباید پشتِ یک کلیک قایم بماند
+    $('#setupManualBox').open = !cli;
+    $('#setupManualSummary').textContent = cli
+      ? 'راهِ دستی — خودم فایل را ویرایش می‌کنم'
+      : 'تنظیماتی که باید بگذاری';
+
+    $('#setupWhere').textContent = tool.kind === 'shell'
+      ? (setupOS === 'win' ? 'این را در PowerShell اجرا کن:' : 'این را در ترمینال اجرا کن:')
+      : 'این را در ' + Snapshot.toolFile(tool, setupOS) + ' بگذار — اگر فایل از قبل هست، فقط کلیدِ داخلش را اضافه کن (نه یک بلوکِ جدا):';
+    $('#setupCode').textContent = Snapshot.mcpSnippet(tool.id, script, data, setupOS, nodePath);
+    // متن را هم پاک کن، نه فقط پنهان — وگرنه یادداشتِ ابزار قبلی در DOM می‌ماند
+    $('#setupNote').textContent = tool.note || '';
+    $('#setupNote').hidden = !tool.note;
+
+    $('#setupVerify').textContent = tool.id === 'claude-code'
+      ? 'برای مطمئن‌شدن، در Claude Code بنویس /mcp — باید «manshi» در فهرست باشد.'
+      : 'بعد از باز شدن، در فهرست ابزارها یا تنظیماتِ MCP همان برنامه دنبال «manshi» بگرد.';
+
+    $('#setupAsk').textContent = setupJob.ask;
+  }
+
+  async function copyTo(text, statusSel) {
+    const st = $(statusSel);
+    try {
+      await navigator.clipboard.writeText(text);
+      if (st) { st.textContent = 'کپی شد ✓'; st.className = 'field-status ok'; }
+      else toast('کپی شد ✓');
+    } catch (e) { if (st) st.textContent = 'کپی نشد: ' + e.message; }
+  }
+
+  // مرجعِ ابزارها — از core/mcp-tools.js می‌آید، همان فایلی که سرور هم می‌خواند،
+  // پس راهنما و رفتارِ واقعی هیچ‌وقت از هم نمی‌افتند.
+  function buildToolDocs() {
+    const rows = $('#askRows');
+    if (!rows || rows.childElementCount) return;
+    for (const ex of MCPTools.EXAMPLES) {
+      const tr = el('tr');
+      tr.append(el('td', null, ex.want));
+      const td = el('td');
+      td.append(el('span', 'ask-say', '«' + ex.say + '»'));
+      td.append(el('span', 'ask-uses', ex.uses.join(' · ')));
+      tr.append(td);
+      rows.append(tr);
+    }
+    const list = $('#toolRows');
+    for (const t of MCPTools.TOOLS) {
+      const li = el('li', t.writes ? 'is-write' : null);
+      const head = el('div', 'tool-head');
+      head.append(el('code', null, t.name), el('b', null, t.fa));
+      if (t.writes) head.append(el('span', 'tool-tag', 'می‌نویسد'));
+      li.append(head, el('small', null, t.faDesc));
+      list.append(li);
+    }
+  }
+
+  if ($('#setupData')) {
+    buildToolDocs();
+    fillSelect($('#setupTool'), Snapshot.TOOLS, t => t.name);
+    fillSelect($('#setupOS'), Snapshot.OSES.map(id => ({ id })), o => OS_FA[o.id]);
+    $('#setupOS').value = setupOS;
+    fillSelect($('#setupJob'), SETUP_JOBS, j => j.name);
+    // مسیر و قدم‌ها را برگردان تا هر بار از نو وارد نشوند
+    Store.getSettings().then(s => {
+      setupFlags = s.bridgeSteps || {};
+      if (s.bridgePath) $('#setupData').value = s.bridgePath;
+      if (s.bridgeRepo) $('#setupRepo').value = s.bridgeRepo;
+      if (s.bridgeNode) $('#setupNode').value = s.bridgeNode;
+      $('#ackNode').checked = !!setupFlags.node;
+      $('#ackRestart').checked = !!setupFlags.restart;
+      paintSetup();
+    }).catch(() => {});
+    $('#ackNode').addEventListener('change', e => saveStep('node', e.target.checked));
+    $('#ackRestart').addEventListener('change', e => saveStep('restart', e.target.checked));
+    $('#setupData').addEventListener('input', e => {
+      paintSetup();
+      Store.saveSettings({ bridgePath: e.target.value.trim() }).catch(() => {});
+    });
+    $('#setupRepo').addEventListener('input', e => {
+      paintSetup();
+      Store.saveSettings({ bridgeRepo: e.target.value.trim() }).catch(() => {});
+    });
+    $('#setupNode').addEventListener('input', e => {
+      paintSetup();
+      Store.saveSettings({ bridgeNode: e.target.value.trim() }).catch(() => {});
+    });
+    $('#setupTool').addEventListener('change', paintSetup);
+    $('#setupOS').addEventListener('change', paintSetup);
+    $('#setupJob').addEventListener('change', e => {
+      setupJob = SETUP_JOBS.find(j => j.id === e.target.value) || SETUP_JOBS[0];
+      paintSetup();
+    });
+    $('#setupCopy').addEventListener('click', async () => {
+      await copyTo($('#setupCode').textContent, '#setupCopyStatus');
+      saveStep('config', true);
+    });
+    $('#setupCopyCli').addEventListener('click', async () => {
+      await copyTo($('#setupCli').textContent, '#setupCopyCliStatus');
+      saveStep('config', true);
+    });
+    $('#setupCopyAsk').addEventListener('click', () => copyTo(setupJob.ask, null));
+    paintSetup();
+  }
+
+  const BRIDGE_FILES = ['snapshot.json', 'inbox.json'];
+
+  // چه فایلی از پل روی دیسک مانده. خاموش‌کردنِ پل فقط نوشتن را متوقف می‌کند —
+  // فایلِ قبلی با تمام محتوایش سرِ جایش می‌ماند، و کاربر انتظارش را ندارد.
+  async function bridgeLeftovers() {
+    const dir = await bridgeDir(false);
+    if (!dir) return [];
+    const found = [];
+    for (const name of BRIDGE_FILES) {
+      try { const fh = await dir.getFileHandle(name); found.push({ name, size: (await fh.getFile()).size }); }
+      catch (e) { /* نبودنش یعنی چیزی نمانده */ }
+    }
+    return found;
+  }
+
+  async function wipeBridgeFiles() {
+    const dir = await bridgeDir(true);   // کلیکِ کاربر است، پس می‌شود اجازه خواست
+    if (!dir) throw new Error('اجازهٔ پوشه برقرار نیست');
+    const gone = [];
+    for (const name of BRIDGE_FILES) {
+      try { await dir.removeEntry(name); gone.push(name); }
+      catch (e) { if (e && e.name !== 'NotFoundError') throw e; }
+    }
+    return gone;
+  }
+
+  function kb(bytes) {
+    if (bytes < 1024) return J.faDigits(String(bytes)) + ' بایت';
+    if (bytes < 1048576) return J.faDigits(String(Math.round(bytes / 1024))) + ' کیلوبایت';
+    return J.faDigits((bytes / 1048576).toFixed(1)) + ' مگابایت';
+  }
+
+  async function refreshLeftoverUI(on) {
+    const box = $('#bridgeLeftover');
+    if (!box) return;
+    // فقط وقتی پل خاموش است معنا دارد؛ وقتی روشن است فایل باید باشد
+    if (on) { box.hidden = true; return; }
+
+    // پوشه‌ای انتخاب شده؟ اگر نه، چیزی برای پاک‌کردن نیست.
+    const handle = await dirLoad().catch(() => null);
+    if (!handle) { box.hidden = true; return; }
+
+    // نکته: پس از بازکردن دوبارهٔ مرورگر، اجازهٔ پوشه به «prompt» برمی‌گردد و
+    // بدون کلیکِ کاربر برنمی‌گردد. قبلاً در همین حالت پنل بی‌صدا پنهان می‌ماند —
+    // یعنی کاربر فکر می‌کرد فایلی نمانده، در حالی که مانده بود.
+    // حالا پنل می‌آید و خودِ دکمه اجازه را می‌گیرد.
+    let left = null;
+    try { left = await bridgeLeftovers(); } catch (e) { left = null; }
+
+    if (left && !left.length) { box.hidden = true; return; }   // واقعاً چیزی نمانده
+
+    box.hidden = false;
+    $('#bridgeLeftoverWhat').textContent = left
+      ? left.map(f => f.name + ' (' + kb(f.size) + ')').join(' و ')
+        + ' — تا پاکشان نکنی، هر برنامه‌ای روی این دستگاه می‌تواند بخواندشان.'
+      : 'پوشهٔ «' + handle.name + '» انتخاب شده بود. برای دیدن و پاک‌کردنِ فایل‌ها '
+        + 'یک بار اجازهٔ دسترسی لازم است — دکمهٔ زیر خودش می‌گیردش.';
+  }
+
+  async function refreshBridgeUI() {
+    if (!$('#bridgeOn')) return;
+    const s = await Store.getSettings();
+    const on = !!s.bridgeOn;
+    $('#bridgeOn').checked = on;
+    $('#bridgeBody').hidden = !on;
+    refreshLeftoverUI(on).catch(() => {});
+    $('#bridgeMode').value = Snapshot.MODES.includes(s.bridgeMode) ? s.bridgeMode : 'mom';
+    $('#bridgeWarn').hidden = $('#bridgeMode').value !== 'full';
+    if (!hasFS) {
+      $('#bridgePick').disabled = true;
+      $('#bridgeWrite').disabled = true;
+      $('#bridgeWhere').textContent = 'این مرورگر انتخاب پوشه را پشتیبانی نمی‌کند — از «کپیِ زمینه» استفاده کنید.';
+      return;
+    }
+    const h = await dirLoad().catch(() => null);
+    $('#bridgeWhere').textContent = h
+      ? 'پوشه: ' + (s.bridgeDirName || h.name) + ' — ' + stamp(s.bridgeWroteAt)
+      : 'هنوز پوشه‌ای انتخاب نشده.';
+    // راهنما فقط بعد از انتخاب پوشه معنا دارد
+    if ($('#bridgeSetup')) $('#bridgeSetup').hidden = !h;
+  }
+
+  if ($('#bridgeOn')) {
+    $('#bridgeOn').addEventListener('change', async e => {
+      await Store.saveSettings({ bridgeOn: e.target.checked });
+      await refreshBridgeUI();
+      if (!e.target.checked) toast('نوشتن خاموش شد — فایل‌های قبلی هنوز در پوشه‌اند');
+    });
+    $('#bridgeWipe').addEventListener('click', async () => {
+      const st = $('#bridgeWipeStatus');
+      st.textContent = ''; st.className = 'field-status';
+      try {
+        const gone = await wipeBridgeFiles();
+        await refreshBridgeUI();
+        toast(gone.length ? 'فایل‌های پل پاک شدند' : 'چیزی برای پاک‌کردن نبود');
+      } catch (e) { st.textContent = 'نشد: ' + e.message; }
+    });
+    $('#bridgeMode').addEventListener('change', async e => {
+      await Store.saveSettings({ bridgeMode: e.target.value });
+      await refreshBridgeUI();
+      if (e.target.value === 'full') toast('سطح روی «متن کامل» رفت — فایل شامل متنِ خامِ جلسه‌ها می‌شود');
+    });
+    $('#bridgePick').addEventListener('click', async () => {
+      try {
+        const h = await window.showDirectoryPicker({ mode: 'readwrite' });
+        await dirSave(h);
+        await Store.saveSettings({ bridgeDirName: h.name });
+        const r = await writeSnapshotFile(true);
+        await refreshBridgeUI();
+        toast(r === 'ok' ? 'پوشه انتخاب شد و فایل نوشته شد' : 'پوشه انتخاب شد');
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;   // خودِ کاربر بست
+        $('#bridgeStatus').textContent = 'نشد: ' + e.message;
+      }
+    });
+    $('#bridgeWrite').addEventListener('click', async () => {
+      const st = $('#bridgeStatus');
+      try {
+        const r = await writeSnapshotFile(true);
+        if (r === 'ok') { st.textContent = 'نوشته شد ✓'; st.className = 'field-status ok'; }
+        else if (r === 'off') st.textContent = 'اول فعالش کنید';
+        else st.textContent = 'اول یک پوشه انتخاب کنید';
+        await refreshBridgeUI();
+      } catch (e) { st.textContent = 'نشد: ' + e.message; }
+    });
+  }
+
+  // هر تغییرِ داده فایل را تازه می‌کند. عمداً به vd_settings گوش نمی‌دهیم،
+  // وگرنه خودِ ثبتِ bridgeWroteAt دوباره نوشتن را صدا می‌زند — حلقهٔ بی‌پایان.
+  if (Store.isExt && chrome.storage && chrome.storage.onChanged) {
+    let snapTimer = null;
+    chrome.storage.onChanged.addListener(changes => {
+      if (!['sessions', 'vd_tasks', 'vd_people'].some(k => k in changes)) return;
+      clearTimeout(snapTimer);
+      snapTimer = setTimeout(() => { writeSnapshotFile(false).catch(() => {}); }, 3000);
+    });
+  }
+
+  // ---------- صندوق ورودی: راهِ برگشت از ابزارهای بیرونی ----------
+  // سرور MCP در همان پوشه inbox.json می‌گذارد. ما می‌خوانیم، نشان می‌دهیم،
+  // و **فقط با تأیید کاربر** اعمال می‌کنیم. این فایل ورودیِ نامعتمد است:
+  // هر برنامه‌ای روی دستگاه می‌تواند در آن پوشه بنویسد.
+  let inboxItems = [], inboxRaw = '';
+
+  // چرا پوشه در دسترس نیست؟ «هیچ» بدترین جوابی است که می‌شود داد.
+  // کروم بعد از بسته‌شدن، اجازهٔ پوشه را به «بپرس» برمی‌گرداند؛ آن حالت را
+  // باید از «اصلاً پوشه‌ای انتخاب نشده» جدا کرد، چون درمانشان فرق دارد.
+  async function bridgeDirState() {
+    const h = await dirLoad().catch(() => null);
+    if (!h) return { state: 'none', dir: null };
+    const p = await h.queryPermission({ mode: 'readwrite' });
+    return p === 'granted' ? { state: 'ok', dir: h } : { state: 'locked', dir: null };
+  }
+
+  async function readInboxFile() {
+    // پل خاموش یعنی خاموش — نه نوشتن، نه خواندن. اگر فایلی مانده باشد،
+    // پنلِ «فایل‌های جامانده» در تنظیمات خبرش را می‌دهد.
+    const s = await Store.getSettings();
+    if (!s.bridgeOn) return { state: 'off', items: [], raw: '' };
+    const d = await bridgeDirState();
+    // قفل‌بودن را برمی‌گردانیم تا نوار بتواند دکمهٔ «اجازه بده» را نشان دهد.
+    // سکوت در این حالت یعنی صورت‌جلسه‌ها رسیده‌اند و کاربر خبردار نمی‌شود.
+    if (d.state !== 'ok') return { state: d.state, items: [], raw: '' };
+    let fh;
+    try { fh = await d.dir.getFileHandle('inbox.json'); }
+    catch (e) { return { state: 'empty', items: [], raw: '' }; }   // نبودنش حالت عادی است
+    const raw = await (await fh.getFile()).text();
+    if (!raw.trim()) return { state: 'empty', items: [], raw: '' };
+    const sessions = await Store.getSessions();
+    const parsed = Inbox.parse(raw, sessions);
+    if (!parsed.ok) return { state: 'broken', items: [], raw, error: parsed.error };
+    return { state: 'ok', items: parsed.items, raw, skipped: parsed.skipped, error: '' };
+  }
+
+  async function refreshInbox() {
+    const banner = $('#inboxBanner');
+    if (!banner) return;
+    let res;
+    try { res = await readInboxFile(); } catch (e) { res = { state: 'broken', items: [], raw: '', error: e.message }; }
+    inboxItems = res.items; inboxRaw = res.raw;
+    banner.textContent = '';
+    banner.classList.toggle('is-blocked', res.state === 'locked' || res.state === 'broken');
+
+    // ── پوشه قفل است ────────────────────────────────────
+    // کروم اجازه را با بسته‌شدن پس می‌گیرد و فقط با کلیکِ کاربر پس می‌دهد.
+    // پس نوار خودش دکمه را می‌آورد؛ کاربر نباید بداند باید کجای تنظیمات برود.
+    if (res.state === 'locked') {
+      banner.hidden = false;
+      const txt = el('div');
+      txt.append(el('strong', null, 'دسترسی به پوشهٔ پل لازم است'));
+      txt.append(el('span', null, 'کروم بعد از بسته‌شدن اجازه را پس می‌گیرد. اگر صورت‌جلسه‌ای رسیده باشد، تا اجازه ندهی دیده نمی‌شود.'));
+      const btn = el('button', 'btn btn-primary', 'اجازه بده');
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try { await bridgeDir(true); } catch (e) { /* انصراف کاربر */ }
+        btn.disabled = false;
+        await refreshInbox();
+      });
+      banner.append(txt, btn);
+      return;
+    }
+
+    if (res.state === 'broken') {
+      banner.hidden = false;
+      const txt = el('div');
+      txt.append(el('strong', null, 'صندوق ورودی خوانده نشد'));
+      txt.append(el('span', null, res.error || 'فایل inbox.json سالم نیست.'));
+      banner.append(txt);
+      return;
+    }
+
+    banner.hidden = !inboxItems.length;
+    if (!inboxItems.length) return;
+    // رسیدنِ اولین مورد یعنی سرور، تنظیمات و ابزار همه درست کار کرده‌اند.
+    // ماندگارش می‌کنیم، وگرنه با خالی‌شدنِ صف قدم دوباره «مانده» می‌شود.
+    if (!setupFlags.ask) saveStep('ask', true);
+
+    const n = J.faDigits(String(inboxItems.length));
+    const txt = el('div');
+    txt.append(el('strong', null, n + ' صورت‌جلسه از ابزار بیرونی رسیده'));
+    txt.append(el('span', null, 'تا تأیید نکنی چیزی ثبت نمی‌شود.'));
+    const btn = el('button', 'btn btn-primary', 'بررسی کن');
+    btn.addEventListener('click', openInboxModal);
+    banner.append(txt, btn);
+  }
+
+  function openInboxModal() {
+    const list = $('#inboxList');
+    list.textContent = '';
+    const conflicts = inboxItems.filter(i => i.state === 'conflict').length;
+    const warn = $('#inboxWarn');
+    warn.hidden = !conflicts;
+    if (conflicts) {
+      warn.textContent = '⚠ ' + J.faDigits(String(conflicts))
+        + ' موردشان روی جلسه‌ای می‌نشیند که از قبل صورت‌جلسه دارد. آن‌ها پیش‌فرض تیک نخورده‌اند.';
+    }
+
+    inboxItems.forEach((item, i) => {
+      const row = el('div', 'inbox-item' + (item.state === 'conflict' ? ' is-conflict' : ''));
+      const head = el('label', 'inbox-head');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.dataset.i = String(i);
+      cb.checked = item.state !== 'conflict';   // تعارض‌ها را کاربر آگاهانه تیک بزند
+      cb.setAttribute('aria-label', 'اعمالِ صورت‌جلسهٔ ' + item.title);
+      cb.addEventListener('change', paintInboxCount);
+      const t = el('div');
+      t.append(el('b', null, item.title));
+      const meta = [];
+      if (item.actions.length) meta.push(J.faDigits(String(item.actions.length)) + ' کار');
+      if (item.state === 'conflict') meta.push('صورت‌جلسهٔ قبلی جایگزین می‌شود');
+      // سندِ بریده‌شده نباید بی‌صدا تأیید شود
+      if (item.truncated) meta.push('⚠ از حدِ مجاز بلندتر بود و انتهایش بریده شد');
+      if (meta.length) t.append(el('small', null, meta.join(' · ')));
+      head.append(cb, t);
+      row.append(head);
+
+      const det = document.createElement('details');
+      det.append(el('summary', 'set-summary', 'دیدنِ متن'));
+      const body = el('div', 'inbox-body');
+      if (item.summary) body.append(el('pre', 'report-text', item.summary));
+      if (item.actions.length) {
+        const ul = el('ul', 'inbox-actions');
+        for (const a of item.actions) {
+          ul.append(el('li', null, a.text + (a.owner ? ' — ' + a.owner : '') + (a.due ? ' (' + a.due + ')' : '')));
+        }
+        body.append(ul);
+      }
+      det.append(body);
+      row.append(det);
+      list.append(row);
+    });
+
+    $('#inboxStatus').textContent = '';
+    $('#inboxAll').checked = false;
+    paintInboxCount();
+    $('#inboxModal').hidden = false;
+  }
+
+  // شمارنده لازم است چون با ۴۰ ردیف، «چندتا تیک خورده» از روی صفحه معلوم نیست.
+  function paintInboxCount() {
+    const boxes = [...$('#inboxList').querySelectorAll('input[type="checkbox"]')];
+    const on = boxes.filter(b => b.checked).length;
+    const all = $('#inboxAll');
+    if (all) {
+      all.checked = on > 0 && on === boxes.length;
+      all.indeterminate = on > 0 && on < boxes.length;
+    }
+    const c = $('#inboxCount');
+    if (c) {
+      c.textContent = on
+        ? J.faDigits(String(on)) + ' از ' + J.faDigits(String(boxes.length)) + ' انتخاب شده'
+        : 'چیزی انتخاب نشده';
+    }
+  }
+
+  async function writeInboxRemaining(appliedIds) {
+    const dir = await bridgeDir(false);
+    if (!dir) return;
+    const left = Inbox.remaining(inboxRaw, appliedIds);
+    const fh = await dir.getFileHandle('inbox.json', { create: true });
+    const w = await fh.createWritable();
+    await w.write(JSON.stringify(left, null, 2));
+    await w.close();
+  }
+
+  if ($('#inboxAll')) {
+    $('#inboxAll').addEventListener('change', e => {
+      const on = e.target.checked;
+      $('#inboxList').querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = on; });
+      paintInboxCount();
+    });
+  }
+
+  if ($('#inboxApply')) {
+    $('#inboxApply').addEventListener('click', async () => {
+      const picked = [...$('#inboxList').querySelectorAll('input:checked')]
+        .map(cb => inboxItems[+cb.dataset.i]).filter(Boolean);
+      if (!picked.length) { $('#inboxStatus').textContent = 'چیزی انتخاب نشده'; return; }
+      try {
+        for (const item of picked) await Store.updateSession(item.meetingId, Inbox.patchFor(item));
+        await writeInboxRemaining(picked.map(p => p.id));
+        $('#inboxModal').hidden = true;
+        await refreshInbox();
+        await renderAll();
+        toast(J.faDigits(String(picked.length)) + ' صورت‌جلسه ثبت شد');
+      } catch (e) { $('#inboxStatus').textContent = 'نشد: ' + e.message; }
+    });
+    $('#inboxDiscard').addEventListener('click', async () => {
+      try {
+        await writeInboxRemaining(inboxItems.map(i => i.id));
+        $('#inboxModal').hidden = true;
+        await refreshInbox();
+        toast('صندوق ورودی خالی شد');
+      } catch (e) { $('#inboxStatus').textContent = 'نشد: ' + e.message; }
+    });
+  }
+
+  // ---------- «بپرس از هوش مصنوعی» ----------
+  // کاربر به «کار» فکر می‌کند نه به «دامنه و سطح»، پس اول کار را انتخاب می‌کند.
+  // و مهم‌تر: بعد از کپی تنهایش نمی‌گذاریم — گام دوم می‌گوید کجا بچسباند.
+  let ctxData = null, ctxText = '', ctxRecipe = Snapshot.RECIPES[0];
+
+  const faNum = n => J.faDigits(String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '٬'));
+
+  // برچسبِ «چقدر داده دارد» کنارِ هر کار. کاربر نباید انتخاب کند و بعد بفهمد خالی است.
+  // برای کارهایی که اول باید یک نفر/جلسه انتخاب شود، شمارش معنا ندارد.
+  function recipeCount(r) {
+    if (r.custom) return null;
+    if (r.scope === 'person' || r.scope === 'session') return null;
+    const c = Snapshot.counts(ctxData, { scope: r.scope });
+    const bits = [];
+    if (c.meetings) bits.push(faNum(c.meetings) + ' جلسه');
+    if (c.tasks) bits.push(faNum(c.tasks) + ' کار');
+    return { empty: !bits.length, text: bits.length ? bits.join(' و ') : 'چیزی نیست' };
+  }
+
+  function buildRecipeList() {
+    const box = $('#ctxRecipes');
+    box.textContent = '';
+    const rows = Snapshot.RECIPES.map(r => ({ r, c: recipeCount(r) }));
+    // روی کاری باز شو که واقعاً داده دارد، نه لزوماً اولی
+    const firstUsable = rows.find(x => !x.c || !x.c.empty) || rows[0];
+
+    rows.forEach(({ r, c }) => {
+      const on = r === firstUsable.r;
+      const lab = el('label', 'recipe' + (on ? ' is-on' : '') + (c && c.empty ? ' is-empty' : ''));
+      const input = document.createElement('input');
+      input.type = 'radio'; input.name = 'ctxRecipe'; input.value = r.id;
+      input.checked = on;
+      // نامِ صریح، وگرنه اسکرین‌ریدر شناسه («catchup») را می‌خواند نه عنوان را
+      input.setAttribute('aria-label', r.title + (c ? ' — ' + c.text : ''));
+      const body = el('div');
+      const head = el('b', null, r.title);
+      if (c) head.append(el('em', 'recipe-count', c.text));
+      body.append(head, el('small', null, r.hint));
+      lab.append(input, body);
+      input.addEventListener('change', () => {
+        box.querySelectorAll('.recipe').forEach(x => x.classList.remove('is-on'));
+        lab.classList.add('is-on');
+        pickRecipe(r);
+      });
+      box.append(lab);
+    });
+    return firstUsable.r;
+  }
+
+  function pickRecipe(r) {
+    ctxRecipe = r;
+    $('#ctxAdv').hidden = !r.custom;
+    if (r.custom) $('#ctxAdv').open = true;
+    else { $('#ctxScope').value = r.scope; $('#ctxMode').value = r.mode; }
+    ctxRender();
+  }
+
+  function ctxRender() {
+    if (!ctxData) return;
+    const scope = $('#ctxScope').value, mode = $('#ctxMode').value;
+    const needsSession = scope === 'session', needsPerson = scope === 'person';
+    $('#ctxSessionWrap').hidden = !needsSession;
+    $('#ctxPersonWrap').hidden = !needsPerson;
+    $('#ctxPicker').hidden = !needsSession && !needsPerson;
+    $('#ctxWarn').hidden = mode !== 'full';
+
+    const r = Snapshot.buildContext(ctxData, {
+      scope, mode, ask: ctxRecipe.ask,
+      id: $('#ctxSession').value, name: $('#ctxPerson').value
+    });
+    ctxText = r.text;
+
+    // به زبان آدمیزاد: چه می‌رود و چقدر است. «توکن» را کسی که مدل را نمی‌شناسد نمی‌فهمد.
+    const box = $('#ctxSummary');
+    box.textContent = '';
+    box.className = 'ctx-summary';
+    if (r.empty) {
+      box.classList.add('is-empty');
+      box.textContent = 'در این انتخاب چیزی برای فرستادن نیست. کار دیگری را امتحان کن یا بازه را بازتر بگیر.';
+      $('#ctxCopy').disabled = true;
+    } else {
+      $('#ctxCopy').disabled = false;
+      const bits = [];
+      if (r.meetings) bits.push(faNum(r.meetings) + ' جلسه');
+      if (r.tasks) bits.push(faNum(r.tasks) + ' کار');
+      const detail = mode === 'full' ? 'با متن کاملشان'
+        : mode === 'mom' ? 'با خلاصه و کارهایشان' : 'فقط عنوان و تاریخ';
+      box.append(el('strong', null, bits.join(' و ') + ' ' + detail + '.'));
+      if (r.unanalyzed) box.append(el('span', null, ' ' + faNum(r.unanalyzed) + ' تایشان هنوز صورت‌جلسه ندارند.'));
+      box.append(document.createElement('br'));
+      box.append(el('span', 'ctx-size', 'اندازه: ' + r.size.text));
+      if (r.size.key === 'large') box.classList.add('is-large');
+      if (r.truncated) box.append(el('span', null, ' — ' + faNum(r.omitted) + ' مورد جا نشد و نیامد.'));
+    }
+
+    $('#ctxPreview').textContent = r.text.slice(0, 4000);
+    $('#ctxStatus').textContent = '';
+    $('#ctxStatus').className = 'field-status';
+  }
+
+  function ctxShowStep(n) {
+    $('#ctxStep1').hidden = n !== 1;
+    $('#ctxStep2').hidden = n !== 2;
+  }
+
+  async function openCtxModal() {
+    const [sessions, tasks] = await Promise.all([Store.getSessions(), Store.getTasks()]);
+    ctxData = { sessions, tasks };
+
+    const ss = $('#ctxSession');
+    ss.textContent = '';
+    [...sessions].sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0)).slice(0, 200)
+      .forEach(s => {
+        const when = s.startedAt ? ' — ' + J.format(new Date(s.startedAt), { weekday: false, year: false }) : '';
+        const o = el('option', null, (s.title || 'جلسهٔ بی‌عنوان') + when);
+        o.value = s.id; ss.append(o);
+      });
+
+    const names = new Set();
+    for (const s of sessions) for (const p of Snapshot.participants(s)) names.add(p);
+    for (const t of tasks) if (t && t.who) names.add(String(t.who).trim());
+    const ps = $('#ctxPerson');
+    ps.textContent = '';
+    [...names].filter(Boolean).sort((a, b) => a.localeCompare(b, 'fa')).forEach(n => {
+      const o = el('option', null, n); o.value = n; ps.append(o);
+    });
+
+    const start = buildRecipeList();
+    ctxShowStep(1);
+    $('#ctxModal').hidden = false;
+    pickRecipe(start);
+    const checked = $('#ctxRecipes input:checked');
+    if (checked) checked.focus();
+  }
+
+  if ($('#projNew')) {
+    $('#projNew').addEventListener('click', async () => {
+      const name = prompt('نام پوشهٔ تازه؟');
+      if (name === null) return;
+      const p = await Store.saveProject({ name });
+      if (!p) { toast('نام خالی بود'); return; }
+      await renderAll();
+      toast('پوشهٔ «' + p.name + '» ساخته شد');
+      openProject(p.id);
+    });
+  }
+
+  ['#ctxBtn', '#ctxBtn2'].forEach(sel => {
+    const b = $(sel);
+    if (b) b.addEventListener('click', openCtxModal);
+  });
+  if ($('#ctxScope')) {
+    $('#ctxScope').addEventListener('change', () => {
+      // نکتهٔ این بازه دقیقاً متنِ خام است — بدون آن، مدل چیزی برای خلاصه‌کردن ندارد.
+      if ($('#ctxScope').value === 'unanalyzed') $('#ctxMode').value = 'full';
+      ctxRender();
+    });
+    $('#ctxMode').addEventListener('change', ctxRender);
+    $('#ctxSession').addEventListener('change', ctxRender);
+    $('#ctxPerson').addEventListener('change', ctxRender);
+    $('#ctxBack').addEventListener('click', () => ctxShowStep(1));
+    $('#ctxCopy').addEventListener('click', async () => {
+      const st = $('#ctxStatus');
+      try {
+        await navigator.clipboard.writeText(ctxText);
+        $('#ctxAskEcho').textContent = ctxRecipe.ask
+          ? 'سؤالی که فرستاده می‌شود: «' + ctxRecipe.ask + '»'
+          : 'سؤالی اضافه نشد — خودت زیر متن بنویس چه می‌خواهی.';
+        ctxShowStep(2);
+        $('#ctxBack').focus();
+      } catch (e) {
+        st.textContent = 'کپی نشد: ' + e.message + ' — از «ببین دقیقاً چه چیزی کپی می‌شود» دستی بردار.';
+      }
+    });
+  }
+
   // ---------- مودال‌ها ----------
   document.querySelectorAll('.modal-close').forEach(b =>
     b.addEventListener('click', () => b.closest('.modal-wrap').hidden = true));
@@ -4572,9 +5912,10 @@
   let hasCalendar = false;
 
   async function renderAll() {
-    const [tasks, settings, evCache, pMeta] = await Promise.all([
-      Store.getTasks(), Store.getSettings(), Store.getEvents(), Store.getPeopleMeta()
+    const [tasks, settings, evCache, pMeta, projects] = await Promise.all([
+      Store.getTasks(), Store.getSettings(), Store.getEvents(), Store.getPeopleMeta(), Store.getProjects()
     ]);
+    cachedProjects = projects || [];
     peopleMetaCache = pMeta || {};
     heroName = settings.userName;
     hasCalendar = !!settings.icsUrl || (!Store.isExt && evCache.events.length > 0);
@@ -5425,6 +6766,15 @@
     await loadScratch();
     await renderAll();
     quickInput.focus();
+    refreshBridgeUI().catch(() => {});
+    // اگر اجازهٔ پوشه هنوز برقرار است، فایل را بی‌سروصدا تازه کن.
+    // اگر نیست (بعد از بستن مرورگر) ساکت رد می‌شود؛ کاربر در تنظیمات
+    // «آخرین نوشتن» را می‌بیند و خودش یک بار کلیک می‌کند.
+    writeSnapshotFile(false).catch(() => {});
+    // صندوق ورودی: موقع باز شدن، و هر دو دقیقه تا وقتی برنامه باز است.
+    // از Service Worker نمی‌شود چون دسترسیِ پوشه فقط در همین صفحه است.
+    refreshInbox().catch(() => {});
+    setInterval(() => refreshInbox().catch(() => {}), 120000);
     // هر دقیقه وضعیت «الان» جلسه‌ها و بنر پایان روز تازه شود
     setInterval(renderAll, 60000);
     // شمارش معکوسِ «جلسهٔ بعدی» روان‌تر: هر ۲۰ ثانیه فقط همان نوار تازه شود

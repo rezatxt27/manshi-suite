@@ -205,7 +205,12 @@ const DateParser = (() => {
   function recurLabel(recur) {
     if (!recur) return '';
     if (recur.freq === 'daily') return recur.interval === 1 ? 'هر روز' : recur.interval % 7 === 0 ? `هر ${J.faDigits(recur.interval / 7)} هفته` : `هر ${J.faDigits(recur.interval)} روز`;
-    if (recur.freq === 'weekly') return `هر ${J.WEEKDAYS[recur.weekday]}`;
+    if (recur.freq === 'weekly') {
+      const w = J.WEEKDAYS[recur.weekday];
+      return w ? `هر ${w}` : '';
+    }
+    // freqِ ناشناخته (پشتیبانِ قدیمی، دادهٔ واردشده) نباید «undefined هر undefined ماه» بدهد
+    if (recur.freq !== 'monthly' || recur.day == null) return '';
     const d = recur.day === 'last' ? 'آخر' : recur.day === 1 ? 'اول' : J.faDigits(recur.day);
     return recur.interval === 1 ? `${d} هر ماه` : `${d} هر ${J.faDigits(recur.interval)} ماه`;
   }

@@ -501,12 +501,18 @@ main { max-width: 1180px; margin: 0 auto; padding: 22px 36px 60px; }
   position: relative; touch-action: manipulation;
   transition: all var(--dur) var(--ease); color: transparent;
 }
-/* پرکاربردترین کنشِ برنامه — ناحیهٔ لمس ۴۴px، ولی فقط روی صفحهٔ لمسی */
+/* پرکاربردترین کنشِ برنامه. ناحیهٔ کلیک همیشه دستِ‌کم ۲۸px است — چون واریانت‌های
+   ۲۰ و ۲۱ پیکسلی از حداقلِ ۲۴×۲۴ استانداردِ WCAG 2.5.8 هم پایین‌تر می‌افتادند —
+   و روی صفحهٔ لمسی به ۴۴px می‌رسد. ناحیه بیرون از جریانِ چیدمان است، پس هیچ‌چیز جابه‌جا نمی‌شود. */
+/* مختصاتِ فیزیکی (top/left) با ترجمهٔ منفی — با inset منطقی، در RTL ناحیه
+   از مرکز درمی‌رفت و یک طرفش کور می‌ماند. */
+.check::before {
+  content: ""; position: absolute;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 28px; height: 28px;
+}
 @media (pointer: coarse) {
-  .check::before {
-    content: ""; position: absolute; inset: 50% auto auto 50%;
-    width: 44px; height: 44px; transform: translate(50%, -50%);
-  }
+  .check::before { width: 44px; height: 44px; }
 }
 .check svg { width: 14px; height: 14px; }
 .check:hover { border-color: var(--accent); color: var(--accent-text); }
@@ -700,9 +706,264 @@ button.chip { min-height: 30px; display: inline-flex; align-items: center; }
 .manager-out { margin-top: 14px; }
 .manager-out .btn { margin-top: 10px; }
 
+/* ── پل هوش مصنوعی + بستهٔ زمینه ─────────────────── */
+.set-h3 {
+  font-size: 13px; font-weight: 700; color: var(--text-2);
+  margin: 18px 0 6px; padding-top: 14px; border-top: 1px solid var(--border-soft);
+}
+.set-acc .set-h3:first-of-type { margin-top: 4px; padding-top: 0; border-top: 0; }
+
+.set-tag {
+  font-size: 11px; font-weight: 600; color: var(--text-3);
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 999px; padding: 3px 9px; margin-inline-start: 8px;
+}
+
+/* کارهای آماده — رادیوی واقعی، پس با کیبورد و اسکرین‌ریدر درست کار می‌کند */
+.recipe-list { display: grid; gap: 8px; margin: 4px 0 14px; }
+.recipe {
+  display: flex; align-items: flex-start; gap: 11px; cursor: pointer;
+  padding: 13px 15px; min-height: 44px;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.recipe:hover { background: var(--surface-3, var(--surface-2)); border-color: var(--border); }
+.recipe:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.recipe input { margin-top: 3px; accent-color: var(--accent); flex: none; }
+.recipe.is-on { border-color: var(--accent); background: var(--accent-soft); }
+.recipe b {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 13.5px; font-weight: 700; color: var(--text-1, var(--text-2));
+}
+.recipe small { display: block; font-size: 12px; color: var(--text-3); margin-top: 3px; line-height: 1.6; }
+.recipe-count {
+  font-size: 11px; font-style: normal; font-weight: 600;
+  color: var(--accent-text); background: var(--accent-soft);
+  border-radius: 999px; padding: 2px 8px; font-variant-numeric: tabular-nums;
+}
+/* خالی: کم‌رنگ ولی همچنان قابل انتخاب — پنهان‌کردنش گیج‌کننده‌تر است */
+.recipe.is-empty { opacity: .62; }
+.recipe.is-empty .recipe-count { color: var(--text-3); background: var(--surface-2); }
+
+/* خلاصهٔ «چه چیزی می‌رود» — به زبان آدمیزاد، نه توکن */
+.ctx-summary {
+  margin: 12px 0; padding: 11px 14px; font-size: 12.5px; line-height: 1.8;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm); color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.ctx-summary .ctx-size { color: var(--text-3); }
+.ctx-summary.is-large .ctx-size { color: var(--amber); font-weight: 700; }
+.ctx-summary.is-empty { background: var(--amber-soft); border-color: transparent; color: var(--amber); }
+.ctx-preview { max-height: 240px; font-size: 12.5px; line-height: 1.75; }
+
+/* گام دوم — بعد از کپی */
+.ctx-done {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 15px; font-weight: 700; color: var(--accent-text); margin-bottom: 16px;
+}
+.ctx-done svg { width: 20px; height: 20px; flex: none; }
+.ctx-steps { list-style: none; display: grid; gap: 14px; margin: 0 0 16px; }
+.ctx-steps li { display: flex; align-items: flex-start; gap: 11px; font-size: 13.5px; line-height: 1.85; }
+.ctx-num {
+  flex: none; width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  background: var(--accent-soft); color: var(--accent-text); margin-top: 2px;
+}
+/* راهنمای گام‌به‌گامِ وصل‌کردن پل */
+.setup { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
+.setup-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+.setup-h { font-size: 13px; font-weight: 700; color: var(--text-2); margin: 0; }
+.setup-progress {
+  margin-inline-start: auto; font-size: 11.5px; font-weight: 700;
+  font-variant-numeric: tabular-nums; color: var(--text-3);
+  background: var(--surface-2); border-radius: 999px; padding: 3px 11px;
+}
+.setup-progress.is-done { background: var(--accent-soft); color: var(--accent-text); }
+
+/* تأییدِ قدم‌هایی که خودمان نمی‌فهمیم */
+.setup-ack {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  min-height: 44px; font-size: 12.5px; color: var(--text-2);
+}
+.setup-ack input { accent-color: var(--accent); }
+
+.set-tag.is-easy { color: var(--accent-text); background: var(--accent-soft); border-color: transparent; }
+.set-tag.is-tech { color: var(--amber); background: var(--amber-soft); border-color: transparent; }
+.setup-step { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 20px; }
+.setup-step > div { flex: 1; min-width: 0; }
+.setup-step b { display: block; font-size: 13px; font-weight: 700; margin-bottom: 5px; }
+.setup-step .hint { margin-bottom: 8px; }
+.setup-n {
+  flex: none; width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  background: var(--surface-2); color: var(--text-3); margin-top: 1px;
+  border: 1px solid var(--border-soft);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+/* انجام‌شده پر می‌شود، «الان اینجایی» حلقه می‌گیرد، بقیه خاکستری می‌مانند.
+   رنگ تنها نشانه نیست: تیک و شماره هم فرق دارند. */
+.setup-n.is-done { background: var(--accent); color: #fff; border-color: transparent; }
+.setup-n.is-now {
+  background: var(--accent-soft); color: var(--accent-text); border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.setup input[type="text"] {
+  width: 100%; font-family: inherit; font-size: 12.5px; min-height: 40px;
+  padding: 9px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-1, var(--text-2));
+}
+.setup input[type="text"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.setup-repo { margin-top: 10px; }
+.setup-repo span { font-size: 12px; color: var(--text-3); }
+
+.setup-risk { margin-top: 8px; padding: 10px 13px; border-radius: var(--radius-sm); font-size: 12.5px; line-height: 1.85; }
+/* هیچ‌کدام «خطا» نیستند — خبرند. پس قرمز نداریم. */
+.setup-risk.is-sync  { background: var(--amber-soft); color: var(--amber); }
+.setup-risk.is-maybe { background: var(--amber-soft); color: var(--amber); }
+.setup-risk.is-local { background: var(--accent-soft); color: var(--accent-text); }
+.setup-risk.is-warn  { background: var(--amber-soft); color: var(--amber); }
+
+/* راهِ آسان باید از راهِ دستی برجسته‌تر دیده شود — بیشترِ کاربران باید همین را بزنند */
+.setup-easy {
+  margin-top: 12px; padding: 13px 15px;
+  border: 1px solid var(--accent); border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+.setup-easy > b { display: block; margin-bottom: 4px; }
+
+.setup-note { margin-top: 8px; }
+.setup-code { margin-top: 10px; font-size: 12px; line-height: 1.8; max-height: 200px; }
+.setup-trouble { margin-top: 6px; }
+
+/* مرجعِ ابزارها */
+.tools-doc { padding: 0 4px 12px; }
+.tools-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.tools-tbl th {
+  text-align: start; font-weight: 700; color: var(--text-3); font-size: 11.5px;
+  padding: 0 0 7px; border-bottom: 1px solid var(--border-soft);
+}
+.tools-tbl td { padding: 10px 0; border-bottom: 1px solid var(--border-soft); vertical-align: top; line-height: 1.8; }
+.tools-tbl td:first-child { color: var(--text-3); width: 38%; padding-inline-end: 14px; }
+.ask-say { display: block; color: var(--text-2); }
+.ask-uses {
+  display: block; margin-top: 4px; font-size: 11px; color: var(--text-3);
+  direction: ltr; unicode-bidi: isolate; text-align: start;
+}
+.tools-h { font-size: 12.5px; font-weight: 700; color: var(--text-2); margin: 20px 0 10px; }
+.tools-list { list-style: none; display: grid; gap: 10px; margin: 0; padding: 0; }
+.tools-list li {
+  padding: 10px 13px; border-radius: var(--radius-sm);
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+}
+.tools-list li.is-write { border-color: var(--amber); background: var(--amber-soft); }
+.tool-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.tool-head code {
+  font-family: inherit; font-size: 12px; font-weight: 700;
+  direction: ltr; unicode-bidi: isolate;
+  background: var(--surface); border: 1px solid var(--border-soft);
+  border-radius: 5px; padding: 2px 7px;
+}
+.tool-head b { font-size: 12.5px; }
+.tool-tag {
+  font-size: 10.5px; font-weight: 700; color: var(--amber);
+  border: 1px solid currentColor; border-radius: 999px; padding: 1px 7px;
+}
+.tools-list small { display: block; margin-top: 6px; font-size: 12px; color: var(--text-3); line-height: 1.75; }
+.trouble { margin: 0; padding: 0 4px 10px; }
+.trouble dt { font-size: 12.5px; font-weight: 700; color: var(--text-2); margin-top: 12px; }
+.trouble dd { margin: 4px 0 0; font-size: 12.5px; line-height: 1.85; color: var(--text-3); }
+.trouble code {
+  font-family: inherit; font-size: 12px; direction: ltr; unicode-bidi: isolate;
+  background: var(--surface-2); border-radius: 5px; padding: 1px 6px;
+}
+
+/* فایل‌های جامانده پس از خاموش‌کردن پل — تا وقتی هستند دیده می‌شود */
+.bridge-leftover {
+  margin: 12px 0 4px; padding: 13px 16px;
+  background: var(--amber-soft); border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.bridge-leftover > div:first-child { display: grid; gap: 4px; margin-bottom: 10px; }
+.bridge-leftover strong { font-size: 13px; color: var(--amber); }
+.bridge-leftover span { font-size: 12.5px; color: var(--text-2); line-height: 1.75; }
+.bridge-leftover .btn-row { margin: 0; }
+.bridge-leftover .leftover-safe { color: var(--text-3); }
+
+/* کنشِ نابودکننده باید رنگِ خودش را داشته باشد، نه رنگِ کنشِ اصلی */
+.btn-danger { background: var(--red); color: #fff; border-color: transparent; }
+.btn-danger:hover { filter: brightness(1.08); }
+.btn-danger:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+
+/* ── صندوق ورودی ─────────────────────────────────── */
+.inbox-banner {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 14px 18px; margin-bottom: 14px;
+  background: var(--accent-soft); border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+.inbox-banner div { display: grid; gap: 3px; }
+.inbox-banner strong { font-size: 14px; color: var(--accent-text); }
+.inbox-banner span { font-size: 12.5px; color: var(--text-3); }
+.inbox-banner .btn { margin-inline-start: auto; }
+/* حالتِ «چیزی رسیده ولی نمی‌توانم ببینمش» — خبرِ خوش نیست، پس رنگش هم نباید باشد */
+.inbox-banner.is-blocked { background: var(--amber-soft); border-color: var(--amber); }
+.inbox-banner.is-blocked strong { color: var(--amber); }
+
+.person-meetings-title { display: flex; align-items: center; gap: 8px; }
+.person-meetings-n {
+  min-width: 20px; padding: 1px 6px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-text);
+  font-size: 11.5px; text-align: center;
+}
+.person-more {
+  width: 100%; margin-top: 4px; padding: 7px;
+  border: 1px dashed var(--line); border-radius: var(--radius-sm);
+  background: none; color: var(--text-3); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.person-more:hover { border-color: var(--accent); color: var(--accent-text); }
+
+.inbox-bulk {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 12px; margin-bottom: 8px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+
+.inbox-list { display: grid; gap: 10px; margin: 4px 0 16px; max-height: 420px; overflow-y: auto; }
+.inbox-item {
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm); padding: 12px 15px;
+}
+.inbox-item.is-conflict { border-color: var(--amber); background: var(--amber-soft); }
+.inbox-head { display: flex; align-items: flex-start; gap: 11px; cursor: pointer; min-height: 44px; }
+.inbox-head input { margin-top: 4px; accent-color: var(--accent); flex: none; }
+.inbox-head b { display: block; font-size: 13.5px; font-weight: 700; }
+.inbox-head small { display: block; font-size: 12px; color: var(--text-3); margin-top: 3px; }
+.inbox-item > details > summary { padding: 8px 0 0; font-size: 12.5px; font-weight: 600; }
+.inbox-body { padding-top: 8px; }
+.inbox-body .report-text { max-height: 200px; }
+.inbox-actions { margin: 10px 0 0; padding-inline-start: 20px; font-size: 12.5px; line-height: 1.9; color: var(--text-2); }
+
+.ctx-links { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.ctx-links .btn { text-decoration: none; }
+/* میان‌بر باید چپ‌به‌راست بماند، وگرنه ⌘V برعکس خوانده می‌شود */
+.ctx-steps kbd {
+  display: inline-block; direction: ltr; unicode-bidi: isolate;
+  font-family: inherit; font-size: 12px; font-weight: 700;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: 6px; padding: 2px 7px; margin: 0 2px;
+}
+
 /* ── تنظیمات ───────────────────────────── */
 #view-settings h1 { font-size: 26px; font-weight: 800; padding: 26px 4px 18px; }
 .settings-grid { display: grid; grid-template-columns: minmax(0,1fr); gap: 12px; max-width: 760px; }
+/* سرگروه‌ها: ۹ آکاردئونِ پشت‌سرهم پیدا نمی‌شدند؛ حالا سه دستهٔ نام‌دار */
+.set-group {
+  font-size: 12px; font-weight: 700; letter-spacing: .02em;
+  color: var(--text-3); margin: 18px 2px 2px;
+}
+.set-group:first-child { margin-top: 0; }
 /* آکاردئون تنظیمات — <details> بومی */
 .set-acc { background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
 .set-acc > :not(summary) { padding: 0 20px; }
@@ -1069,7 +1330,38 @@ h4.mom-h { font-size: 14px; color: var(--text-2); }
 .chip-sub svg { width: 14px; height: 14px; }
 .chip-sub.is-full { background: var(--accent-soft); color: var(--accent-text); border-color: transparent; }
 .sub-panel { margin-top: 9px; padding-top: 9px; border-top: 1px dashed var(--border-soft); display: flex; flex-direction: column; gap: 5px; }
-.sub-row { display: flex; align-items: center; gap: 8px; }
+/* زیرکارِ توضیح‌دار دیگر تک‌خطی نیست — بالا تراز می‌شود نه وسط */
+.sub-row { display: flex; align-items: flex-start; gap: 8px; }
+.sub-body { flex: 1; min-width: 0; display: grid; gap: 3px; padding-top: 1px; }
+.sub-note {
+  font-size: 12px; line-height: 1.75; color: var(--text-3); white-space: pre-wrap;
+  padding-inline-start: 8px; border-inline-start: 2px solid var(--border-soft);
+}
+.sub-row.is-done .sub-note { opacity: .6; }
+.sub-note-btn {
+  flex: none; width: 22px; height: 22px; border: 0; background: none; color: var(--text-3);
+  border-radius: 6px; cursor: pointer; opacity: .5; position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sub-note-btn svg { width: 14px; height: 14px; }
+.sub-row:hover .sub-note-btn { opacity: 1; }
+.sub-note-btn:hover { color: var(--accent-text); }
+/* وقتی توضیح دارد، همیشه دیده شود — نه فقط روی hover */
+.sub-note-btn.is-on { opacity: 1; color: var(--accent-text); }
+
+/* توضیحِ کار در نمای فهرست */
+.todo-note {
+  display: block; width: 100%; text-align: start; margin-top: 7px; padding: 0 0 0 0;
+  border: 0; background: none; cursor: pointer; font: inherit;
+  padding-inline-start: 9px; border-inline-start: 2px solid var(--border);
+  color: var(--text-2); font-size: 12.5px; line-height: 1.8;
+}
+.todo-note-txt {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; white-space: pre-wrap;
+}
+.todo-note:hover { border-inline-start-color: var(--accent); color: var(--text); }
+.todo-note:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .sub-check { flex: none; width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--text-3); background: transparent; color: transparent; cursor: pointer; touch-action: manipulation; position: relative; display: inline-flex; align-items: center; justify-content: center; transition: all var(--dur) var(--ease); }
 @media (pointer: coarse) {
   .sub-check::before, .sub-del::before, .todo-sel-box::before { content: ""; position: absolute; inset: 50% auto auto 50%; width: 44px; height: 44px; transform: translate(50%, -50%); }
@@ -1188,6 +1480,221 @@ h4.mom-h { font-size: 14px; color: var(--text-2); }
 .kanban-card-title { font-size: 14px; font-weight: 600; line-height: 1.45; }
 .kanban-card.is-done .kanban-card-title { color: var(--text-3); text-decoration: line-through; }
 .kanban-card .todo-chips { margin-top: 7px; }
+/* نوار پوشه‌ها — ورودیِ مستقل به پرونده‌ها */
+.proj-bar { margin: 0 4px 18px; }
+.proj-bar-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.proj-bar-head h2 { font-size: 13px; font-weight: 700; color: var(--text-2); margin: 0; }
+.proj-bar-head .btn { margin-inline-start: auto; }
+.proj-bar-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.proj-card {
+  display: grid; gap: 5px; padding: 13px 15px; min-height: 44px; text-align: start;
+  background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+  font: inherit; cursor: pointer;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.proj-card:hover { border-color: var(--proj, var(--accent)); box-shadow: var(--shadow); }
+.proj-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.proj-card-top { display: flex; align-items: center; gap: 8px; }
+.proj-card-top b { font-size: 13.5px; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.proj-card .proj-dot { background: var(--proj, var(--text-3)); }
+.proj-card-n {
+  margin-inline-start: auto; flex: none; font-size: 11px; font-weight: 700;
+  background: var(--accent-soft); color: var(--accent-text);
+  border-radius: 999px; padding: 1px 8px; font-variant-numeric: tabular-nums;
+}
+.proj-card-sub { display: flex; gap: 7px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-3); }
+.proj-card-stage {
+  font-weight: 700; color: var(--amber); background: var(--amber-soft);
+  border-radius: 999px; padding: 1px 8px;
+}
+
+/* پروژهٔ جلسه — حالتِ مشتق خط‌چین است تا با نسبتِ ثبت‌شده اشتباه نشود */
+.detail-proj { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0 4px; }
+.detail-proj .chip-proj.is-none { color: var(--text-3); border: 1px dashed var(--border); background: none; }
+.detail-proj .chip-proj.is-derived { border: 1px dashed var(--proj, var(--border)); }
+.detail-proj-go { font-size: 12px; }
+
+/* ── پروندهٔ پروژه ─────────────────────────────────── */
+.proj-page-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 26px 4px 4px; }
+.proj-back { flex: none; }
+.proj-page-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.proj-page-title h1 { font-size: 24px; font-weight: 800; margin: 0; }
+.proj-crumb { border: 0; background: none; font: inherit; font-size: 14px; color: var(--text-3); cursor: pointer; padding: 0; }
+.proj-crumb:hover { color: var(--accent-text); text-decoration: underline; }
+.proj-crumb-sep { color: var(--text-3); }
+.proj-stage {
+  margin-inline-start: auto; min-height: 40px; padding: 8px 13px; font: inherit; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-2);
+}
+
+/* کارِ بعدی — تنها چیزی که واقعاً باید بدانی، پس بزرگ‌ترین چیزِ صفحه */
+.proj-next {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 16px 4px; padding: 16px 20px;
+  background: var(--accent-soft); border: 1px solid var(--accent); border-radius: var(--radius);
+}
+.proj-next.is-empty { background: var(--surface-2); border-color: var(--border-soft); }
+.proj-next-label { font-size: 11.5px; font-weight: 700; color: var(--accent-text); flex: none; }
+.proj-next.is-empty .proj-next-label { color: var(--text-3); }
+.proj-next-title {
+  border: 0; background: none; font: inherit; font-size: 16px; font-weight: 700;
+  color: var(--text-1, var(--text-2)); cursor: pointer; padding: 0; text-align: start; min-width: 0;
+}
+.proj-next-title:hover { text-decoration: underline; }
+.proj-next-title.is-none { color: var(--text-3); font-weight: 500; cursor: default; }
+.proj-next-why { font-size: 12px; color: var(--text-3); margin-inline-start: auto; }
+
+.proj-stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 4px 20px; }
+.proj-stat {
+  flex: 1; min-width: 92px; padding: 12px 14px; text-align: center;
+  background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+}
+.proj-stat b { display: block; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.proj-stat span { font-size: 11.5px; color: var(--text-3); }
+.proj-stat.is-warn b { color: var(--amber); }
+
+.proj-sec { margin: 0 4px 24px; }
+.proj-sec-h { display: flex; align-items: baseline; gap: 10px; font-size: 13px; font-weight: 700; color: var(--text-2); margin-bottom: 10px; }
+.proj-sec-note { font-size: 11.5px; font-weight: 600; color: var(--text-3); margin-inline-start: auto; }
+.proj-sec-note.is-cold { color: var(--amber); }
+
+.proj-people { display: flex; flex-wrap: wrap; gap: 8px; }
+.proj-person {
+  display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 8px 13px;
+  background: var(--surface); border: 1px solid var(--border-soft); border-radius: 999px;
+  font: inherit; font-size: 13px; color: var(--text-2); cursor: pointer;
+  transition: border-color var(--dur) var(--ease);
+}
+.proj-person:hover { border-color: var(--accent); }
+.proj-person.is-cold { border-style: dashed; color: var(--text-3); }
+.proj-person-n {
+  font-size: 11px; font-weight: 700; background: var(--accent-soft); color: var(--accent-text);
+  border-radius: 999px; padding: 1px 7px; font-variant-numeric: tabular-nums;
+}
+
+.proj-meetings { display: grid; gap: 8px; }
+.proj-meeting {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 11px 15px;
+  background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+  font: inherit; cursor: pointer; text-align: start;
+  transition: border-color var(--dur) var(--ease);
+}
+.proj-meeting:hover { border-color: var(--accent); }
+.proj-meeting-title { font-size: 13.5px; font-weight: 600; color: var(--text-2); min-width: 0; }
+.proj-meeting-date { font-size: 12px; color: var(--text-3); margin-inline-start: auto; flex: none; }
+.proj-meeting-tag {
+  flex: none; font-size: 10.5px; font-weight: 700; color: var(--amber);
+  background: var(--amber-soft); border-radius: 999px; padding: 2px 8px;
+}
+
+/* دفترچهٔ توضیحات — سابقه‌ای زمان‌دار، نه یک کادرِ بازنویسی‌شونده */
+.note-log {
+  display: grid; gap: 8px; max-height: 220px; overflow-y: auto;
+  margin-bottom: 10px; padding-inline-end: 2px;
+}
+.note-entry {
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm); padding: 8px 11px;
+}
+.note-entry-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.note-entry-at {
+  font-size: 11px; font-weight: 700; color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.note-entry-del {
+  margin-inline-start: auto; width: 26px; height: 26px; border: 0; background: none;
+  border-radius: 6px; color: var(--text-3); cursor: pointer; opacity: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: opacity var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.note-entry-del svg { width: 13px; height: 13px; }
+.note-entry:hover .note-entry-del, .note-entry-del:focus-visible { opacity: 1; }
+.note-entry-del:hover { color: var(--red); background: var(--red-soft); }
+.note-entry-text {
+  margin: 0; font-size: 12.5px; line-height: 1.8; color: var(--text-2);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+/* پروژه‌ها — شش رنگِ ثابت که هم در روشن هم تیره خوانا باشند */
+.proj-dot { width: 8px; height: 8px; border-radius: 3px; flex: none; display: inline-block; background: var(--text-3); }
+.proj-sky    { --proj: #3b9ede; }
+.proj-grass  { --proj: #4aa568; }
+.proj-amber  { --proj: #d59234; }
+.proj-rose   { --proj: #d4626f; }
+.proj-violet { --proj: #8b6fd0; }
+.proj-slate  { --proj: #6b7a8f; }
+.proj-dot.proj-sky, .proj-dot.proj-grass, .proj-dot.proj-amber,
+.proj-dot.proj-rose, .proj-dot.proj-violet, .proj-dot.proj-slate { background: var(--proj); }
+.proj-dot.proj-empty { background: transparent; border: 1.5px solid var(--border); }
+
+.chip-proj { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border: 0; font: inherit; }
+.chip-proj .proj-dot { background: var(--proj, var(--text-3)); }
+.chip-proj:hover { background: var(--surface-2); }
+
+.proj-pop { min-width: 230px; }
+.proj-list { display: grid; gap: 2px; max-height: 240px; overflow-y: auto; margin-bottom: 8px; }
+.proj-opt {
+  display: flex; align-items: center; gap: 9px; width: 100%; min-height: 40px;
+  padding: 8px 11px; border: 0; background: none; border-radius: 8px;
+  font: inherit; font-size: 13px; color: var(--text-2); cursor: pointer; text-align: start;
+}
+.proj-opt:hover { background: var(--surface-2); }
+.proj-opt.is-on { background: var(--accent-soft); color: var(--accent-text); font-weight: 700; }
+/* زیرپروژه با تورفتگی و خطِ کناری، تا سلسله‌مراتب بدون توضیح فهمیده شود */
+.proj-opt.is-child { margin-inline-start: 14px; border-inline-start: 2px solid var(--border-soft); border-radius: 0 8px 8px 0; }
+.proj-opt.proj-none { color: var(--text-3); margin-top: 4px; border-top: 1px solid var(--border-soft); border-radius: 0; }
+.proj-add { display: flex; gap: 6px; }
+.proj-add-input {
+  flex: 1; min-width: 0; min-height: 40px; padding: 8px 11px; font: inherit; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text);
+}
+.proj-add-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.proj-add-btn {
+  flex: none; width: 40px; min-height: 40px; border: 0; border-radius: 8px;
+  background: var(--accent-soft); color: var(--accent-text); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.proj-add-btn svg { width: 16px; height: 16px; }
+.proj-add-btn:hover { background: var(--accent); color: #fff; }
+
+/* اولویت — رنگ تنها نشانه نیست: متن و نقطه هم هست */
+.prio-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; background: currentColor; }
+.chip-prio { display: inline-flex; align-items: center; gap: 6px; }
+.chip-prio.prio-3 { color: var(--red); background: var(--red-soft); }
+.chip-prio.prio-2 { color: var(--amber); background: var(--amber-soft); }
+.chip-prio.prio-1 { color: var(--text-3); background: var(--surface-2); }
+
+.prio-pop { display: grid; gap: 2px; min-width: 190px; }
+.prio-opt {
+  display: flex; align-items: center; gap: 9px; width: 100%; min-height: 40px;
+  padding: 8px 11px; border: 0; background: none; border-radius: 8px;
+  font: inherit; font-size: 13px; color: var(--text-2); cursor: pointer; text-align: start;
+}
+.prio-opt:hover { background: var(--surface-2); }
+.prio-opt.is-on { background: var(--accent-soft); color: var(--accent-text); font-weight: 700; }
+.prio-opt.prio-3 .prio-dot { background: var(--red); }
+.prio-opt.prio-2 .prio-dot { background: var(--amber); }
+.prio-opt.prio-1 .prio-dot { background: var(--text-3); }
+.prio-opt.prio-0 .prio-dot { background: transparent; border: 1.5px solid var(--border); }
+
+/* زیرکارها در کانبان: نوارِ فشرده که با کلیک همان پنلِ فهرست را باز می‌کند */
+.kc-subs {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  margin-top: 8px; padding: 6px 8px; min-height: 32px;
+  background: var(--surface); border: 1px solid var(--border-soft);
+  border-radius: 8px; cursor: pointer; font: inherit; color: var(--text-3);
+  transition: border-color var(--dur) var(--ease);
+}
+.kc-subs:hover { border-color: var(--accent); color: var(--text-2); }
+.kc-subs:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.kc-subs-ic { flex: none; display: inline-flex; }
+.kc-subs-ic svg { width: 13px; height: 13px; }
+.kc-subs-track { flex: 1; height: 4px; border-radius: 99px; background: var(--border-soft); overflow: hidden; }
+.kc-subs-fill { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width var(--dur) var(--ease); }
+.kc-subs-n { flex: none; font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kc-subs.is-full { color: var(--accent-text); border-color: var(--accent-soft); }
+.kanban-card .sub-panel { margin-top: 8px; padding-inline-start: 2px; }
+
 .kanban-card-note { font-size: 12px; color: var(--text-2); margin-top: 7px; padding-inline-start: 8px; border-inline-start: 2px solid var(--border); white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
 .kanban-card-foot { display: flex; justify-content: flex-end; gap: 2px; margin-top: 8px; opacity: .5; transition: opacity var(--dur) var(--ease); }
 .kanban-card:hover .kanban-card-foot, .kanban-card:focus-within .kanban-card-foot { opacity: 1; }
@@ -1405,6 +1912,8 @@ button.kpi { font: inherit; color: var(--text); }
 
 /* نشانِ هم‌نام در پروندهٔ آدم‌ها */
 .person-dup { font-size: 12px; font-weight: 800; color: var(--amber); background: var(--amber-soft); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+/* «شاید چند نفر» ادعای کمتری از «هم‌نام» دارد — یعنی نمی‌دانیم، نه اینکه می‌دانیم */
+.person-dup.is-amb { color: var(--text-3); background: none; border: 1px dashed var(--line); font-weight: 600; }
 
 /* میان‌برها داخلِ نوارِ کامپوزر — یک ردیفِ افقی کمتر در صفحهٔ اصلی */
 .composer-tabs .quick-actions { margin-inline-start: auto; display: flex; gap: 6px; flex-wrap: wrap; }

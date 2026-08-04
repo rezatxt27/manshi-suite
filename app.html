@@ -93,6 +93,9 @@
   <!-- خبرِ نسخهٔ تازه — فقط وقتی واقعاً نسخهٔ بالاتری هست -->
   <div id="updateBanner" class="update-banner" hidden></div>
 
+  <!-- صورت‌جلسه‌ای که از ابزار بیرونی رسیده و منتظر تأیید است -->
+  <div id="inboxBanner" class="inbox-banner" hidden></div>
+
   <!-- اخبار فناوری — اختیاری، پیش‌فرض خاموش -->
   <section id="newsCard" class="news-card" hidden></section>
 
@@ -247,6 +250,10 @@
           وارد کردن از منشی
         </button>
         <input type="file" id="importMonshiFile" accept="application/json,.json" hidden>
+        <button class="btn btn-ghost" id="ctxBtn" title="دادهٔ جلسه‌ها را آمادهٔ چسباندن در ChatGPT یا Claude کن">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>
+          بپرس از AI
+        </button>
       </div>
     </div>
     <p class="report-range">صورت‌جلسهٔ هوشمند از Google Meet. زیرنویس در جلسه ثبت می‌شود؛ اینجا سند کامل ساخته می‌شود و اقدام‌ها به «کارها» می‌روند. اگر اکستنشن منشی را دارید، از پشتیبان آن جلسه‌های قبلی‌تان را وارد کنید.</p>
@@ -268,6 +275,9 @@
 
 <!-- ═══════════ کارها ═══════════ -->
 <section id="view-tasks" class="view">
+  <!-- پروندهٔ پروژه — روی خودِ نمای کارها می‌نشیند، نه یک تبِ نهم -->
+  <div id="projPage" hidden></div>
+  <div id="tasksMain">
   <div class="report-head">
     <div>
       <h1>کارها</h1>
@@ -295,6 +305,15 @@
     <button type="submit" class="btn btn-primary">ثبت</button>
   </form>
 
+  <!-- پوشه‌ها: فهرست مستقل، بالای هر دو نما -->
+  <section class="proj-bar" id="projBar" hidden>
+    <div class="proj-bar-head">
+      <h2>پوشه‌ها</h2>
+      <button class="btn btn-ghost btn-sm" id="projNew">پوشهٔ تازه</button>
+    </div>
+    <div class="proj-bar-list" id="projBarList"></div>
+  </section>
+
   <div id="taskListWrap">
     <div class="todo-filters" id="todoFilters">
       <button class="todo-filter is-active" data-filter="active">در جریان</button>
@@ -319,6 +338,7 @@
         <span>گروه‌بندی</span>
         <select id="todoGroup" aria-label="گروه‌بندی کارها">
           <option value="date">تاریخ</option>
+          <option value="project">پروژه</option>
           <option value="tag">برچسب</option>
           <option value="meeting">جلسه</option>
           <option value="person">فرد</option>
@@ -339,6 +359,7 @@
     <div id="todoList" class="todo-list"></div>
   </div>
   <div id="taskBoard" class="kanban" hidden></div>
+  </div>
 </section>
 
 <!-- ═══════════ آدم‌ها ═══════════ -->
@@ -414,17 +435,19 @@
 <section id="view-settings" class="view">
   <h1>تنظیمات</h1>
   <div class="settings-grid">
-    <details class="set-acc" open>
+    <h2 class="set-group">اتصال‌ها</h2>
+
+<details class="set-acc" open>
       <summary class="set-summary">تقویم گوگل (iCal)</summary>
       <p class="hint">در گوگل‌کلندر: Settings ← تقویم موردنظر ← «Secret address in iCal format» را کپی کنید.</p>
       <label class="field"><span>آدرس مخفی iCal</span>
         <input type="password" id="setIcs" dir="ltr" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
       </label>
-      <p class="hint hint-warn">⚠ این آدرس مثل رمز عبور است — هر کسی داشته باشدش تقویم شما را می‌بیند. وردست آن را فقط روی همین دستگاه نگه می‌دارد و در هیچ لاگ یا خروجی‌ای نمی‌آورد.</p>
+      <p class="hint hint-warn">⚠ این آدرس مثل رمز عبور است — هر کسی داشته باشدش تقویم شما را می‌بیند. منشی آن را فقط روی همین دستگاه نگه می‌دارد و در هیچ لاگ یا خروجی‌ای نمی‌آورد.</p>
       <div class="btn-row"><button class="btn btn-primary" id="saveIcs">ذخیره و اتصال</button><span class="field-status" id="icsStatus"></span></div>
     </details>
 
-    <details class="set-acc ai-card" open>
+<details class="set-acc ai-card" open>
       <summary class="set-summary">هوش مصنوعی — اتصال‌ها</summary>
       <p class="hint">می‌توانید چند سرویس اضافه کنید (برای پشتیبان یا انتخاب مدل ارزان/قوی). اتصالِ «فعال» برای همهٔ ماژول‌ها استفاده می‌شود. کلید فقط روی همین دستگاه می‌ماند و هرگز در خروجی بدون‌رمز نمی‌آید.</p>
       <div id="aiList" class="ai-list"></div>
@@ -450,38 +473,177 @@
       </div>
     </details>
 
-    <details class="set-acc">
-      <summary class="set-summary">قالب‌های صورت‌جلسه</summary>
-      <p class="hint">قالب‌های آماده همیشه هستند. می‌توانید قالب سفارشی خودتان را هم بسازید تا موقع ساخت صورت‌جلسه انتخابش کنید.</p>
-      <div id="tplList" class="ai-list"></div>
-      <div class="ai-editor">
-        <label class="field"><span>نام قالب</span><input type="text" id="tplName" maxlength="60" placeholder="مثلاً جلسهٔ کمیتهٔ محصول"></label>
-        <label class="field"><span>دستور قالب (روی چه چیزی تمرکز کند)</span><textarea id="tplInstructions" rows="3" maxlength="4000" placeholder="مثلاً روی تصمیم‌های محصول، ریسک انتشار و وابستگی‌های فنی تمرکز کن."></textarea></label>
-        <div class="btn-row"><button class="btn btn-primary" id="tplSave">ذخیره قالب</button><span class="field-status" id="tplStatus"></span></div>
+<details class="set-acc">
+      <summary class="set-summary">پل هوش مصنوعی</summary>
+      <p class="hint">منشی می‌تواند جلسه‌ها و کارهایت را در اختیار هوش مصنوعیِ خودت بگذارد — ChatGPT، Claude، یا هر کدام که داری. دو راه دارد:</p>
+
+      <h3 class="set-h3">۱. کپی کن و بچسبان <span class="set-tag is-easy">برای همه · بدون نصب</span></h3>
+      <p class="hint">منشی داده را با یک سؤالِ آماده در کلیپ‌بورد می‌گذارد. شما در چت‌بات می‌چسبانید و Enter می‌زنید. همین. هیچ چیزی هم به اینترنت فرستاده نمی‌شود.</p>
+      <div class="btn-row"><button class="btn btn-primary" id="ctxBtn2">شروع کن</button></div>
+
+      <h3 class="set-h3">۲. اتصال مستقیم <span class="set-tag is-tech">کارِ فنی دارد</span></h3>
+      <p class="hint">منشی از جلسه‌هایت یک فایل می‌سازد و در پوشه‌ای که خودت انتخاب می‌کنی می‌گذارد. بعد Claude یا Codex آن فایل را می‌خوانند — و صورت‌جلسه‌ای که ساختند برایت پس می‌فرستند تا تأیید کنی.</p>
+      <p class="hint">دیگر لازم نیست چیزی را کپی و بچسبانی، ولی راه‌اندازی‌اش ترمینال می‌خواهد. اینترنت لازم ندارد و هیچ پورتی باز نمی‌شود.</p>
+      <label class="check-inline"><input type="checkbox" id="bridgeOn"><span>نوشتن فایل snapshot فعال باشد</span></label>
+      <div class="bridge-leftover" id="bridgeLeftover" hidden>
+        <div>
+          <strong>نوشتن خاموش است، ولی فایل‌های قبلی هنوز در پوشه‌اند.</strong>
+          <span id="bridgeLeftoverWhat"></span>
+          <span class="leftover-safe">جلسه‌ها و کارهایت دست نمی‌خورند — این فایل‌ها فقط یک کپی برای ابزار بیرونی‌اند. اصلِ داده در خودِ منشی می‌ماند.</span>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-danger" id="bridgeWipe">پاک کردن فایل‌ها</button>
+          <span class="field-status" id="bridgeWipeStatus"></span>
+        </div>
+      </div>
+      <div id="bridgeBody" hidden>
+        <label class="field"><span>چقدر از داده در فایل باشد</span>
+          <select id="bridgeMode">
+            <option value="meta">فقط فراداده — عنوان، تاریخ، شرکت‌کنندگان</option>
+            <option value="mom">صورت‌جلسه — + خلاصه و کارها (پیشنهادی)</option>
+            <option value="full">متن کامل — + متنِ کلمه‌به‌کلمهٔ جلسه‌ها</option>
+          </select>
+        </label>
+        <p class="hint hint-warn" id="bridgeWarn" hidden>⚠ متنِ خامِ جلسه‌ها حساس‌ترین دادهٔ منشی است — هرچه هر کسی گفته، کلمه‌به‌کلمه. این پوشه را در دراپ‌باکس، درایو یا هر پوشهٔ همگام‌شونده‌ای نگذارید.</p>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="bridgePick">انتخاب پوشه</button>
+          <button class="btn btn-ghost" id="bridgeWrite">نوشتن همین حالا</button>
+          <span class="field-status" id="bridgeStatus"></span>
+        </div>
+        <p class="hint" id="bridgeWhere"></p>
+
+        <div class="setup" id="bridgeSetup" hidden>
+          <div class="setup-head">
+            <h4 class="setup-h">حالا وصلش کن</h4>
+            <span class="setup-progress" id="setupProgress" aria-live="polite"></span>
+          </div>
+
+          <div class="setup-step">
+            <span class="setup-n" data-step="node">۰</span>
+            <div>
+              <b>Node نصب باشد</b>
+              <p class="hint">در ترمینال <code>node -v</code> را بزن. اگر شماره‌ای مثل <span dir="ltr">v22.3.0</span> دیدی، آماده‌ای. اگر خطا داد، از <span dir="ltr">nodejs.org</span> نسخهٔ LTS را نصب کن.</p>
+              <p class="hint">حالا مسیرش را هم بگیر: دستور <code id="setupNodeCmd">which node</code> را بزن و خروجی‌اش را اینجا بچسبان. برنامه‌های دسکتاپ مسیرِ ترمینال را نمی‌بینند و با <code>node</code>ِ خالی بالا نمی‌آیند — شایع‌ترین دلیلِ «سرور بالا نیامد» همین است.</p>
+              <input type="text" id="setupNode" dir="ltr" spellcheck="false" placeholder="/usr/local/bin/node" aria-label="مسیر کامل Node">
+              <p class="setup-risk is-warn" id="setupNodeWarn" hidden></p>
+              <label class="setup-ack"><input type="checkbox" id="ackNode"><span>Node را دارم</span></label>
+            </div>
+          </div>
+
+          <div class="setup-step">
+            <span class="setup-n" data-step="path">۱</span>
+            <div>
+              <b>مسیر پوشه را بچسبان</b>
+              <p class="hint">منشی مسیر را نمی‌بیند، فقط نامش را. در Finder روی پوشه راست‌کلیک کن، کلید <kbd>Option</kbd> را نگه دار و «Copy … as Pathname» را بزن. در ویندوز: Shift+راست‌کلیک روی پوشه ← «Copy as path» (کوتیشن‌های دو طرفش را بردار).</p>
+              <input type="text" id="setupData" dir="ltr" placeholder="/Users/شما/manshi-data" spellcheck="false" aria-label="مسیر کامل پوشهٔ داده">
+              <p class="setup-risk" id="setupRisk" hidden></p>
+            </div>
+          </div>
+
+          <div class="setup-step">
+            <span class="setup-n" data-step="config">۲</span>
+            <div>
+              <b>ابزارت را انتخاب کن</b>
+              <div class="field-row">
+                <label class="field"><span>ابزار هوش مصنوعی</span><select id="setupTool"></select></label>
+                <label class="field"><span>سیستم‌عامل</span><select id="setupOS"></select></label>
+                <label class="field"><span>پوشهٔ خودِ منشی</span>
+                  <input type="text" id="setupRepo" dir="ltr" spellcheck="false" placeholder="~/manshi-suite">
+                </label>
+              </div>
+              <p class="hint">همان پوشه‌ای که اکستنشن را از آن بار کردی — نه پوشهٔ داده. اگر یادت نیست: در کروم <span dir="ltr">chrome://extensions</span> را باز کن، کارت منشی مسیرش را زیرِ «Loaded from» نوشته.</p>
+              <p class="setup-risk is-warn" id="setupRepoWarn" hidden></p>
+
+              <div class="setup-easy" id="setupCliBox" hidden>
+                <b>راهِ آسان — بگذار خودِ ابزار تنظیمش کند</b>
+                <p class="hint">این را در ترمینال بزن. خودش فایل تنظیمات را درست می‌نویسد، پس لازم نیست دستی چیزی را ادغام کنی:</p>
+                <pre class="report-text setup-code" id="setupCli" dir="ltr"></pre>
+                <div class="btn-row"><button class="btn btn-primary btn-sm" id="setupCopyCli">کپیِ دستور</button><span class="field-status" id="setupCopyCliStatus"></span></div>
+              </div>
+
+              <details class="set-acc" id="setupManualBox">
+                <summary class="set-summary" id="setupManualSummary">راهِ دستی — خودم فایل را ویرایش می‌کنم</summary>
+                <div>
+                  <p class="hint" id="setupWhere"></p>
+                  <pre class="report-text setup-code" id="setupCode" dir="ltr"></pre>
+                  <div class="btn-row"><button class="btn btn-ghost btn-sm" id="setupCopy">کپیِ تنظیمات</button><span class="field-status" id="setupCopyStatus"></span></div>
+                </div>
+              </details>
+              <p class="hint setup-note" id="setupNote" hidden></p>
+            </div>
+          </div>
+
+          <div class="setup-step">
+            <span class="setup-n" data-step="restart">۳</span>
+            <div>
+              <b>ابزار را ببند و باز کن</b>
+              <p class="hint" id="setupVerify"></p>
+              <p class="hint">اگر پیدا نشد، بخشِ «کار نکرد؟» را ببین.</p>
+              <label class="setup-ack"><input type="checkbox" id="ackRestart"><span>باز کردم و منشی را دیدم</span></label>
+            </div>
+          </div>
+
+          <div class="setup-step">
+            <span class="setup-n" data-step="ask">۴</span>
+            <div>
+              <b>حالا این را بپرس</b>
+              <label class="field"><span>چه کاری؟</span><select id="setupJob"></select></label>
+              <pre class="report-text setup-code" id="setupAsk"></pre>
+              <div class="btn-row"><button class="btn btn-ghost btn-sm" id="setupCopyAsk">کپیِ سؤال</button></div>
+              <p class="hint">پنج‌تا پنج‌تا جلو برو، نه همه با هم — هر جلسهٔ یک‌ساعته حدود ۲۰ هزار توکن است و سقفِ مصرفِ اشتراکت را می‌زند. بعد برگرد به منشی: نوارِ «صورت‌جلسه رسیده» می‌آید.</p>
+            </div>
+          </div>
+
+          <details class="set-acc setup-trouble">
+            <summary class="set-summary">چه چیزهایی می‌توانی بخواهی</summary>
+            <div class="tools-doc">
+              <p class="hint">لازم نیست نامِ ابزارها را بلد باشی — به فارسی بگو چه می‌خواهی و مدل خودش انتخاب می‌کند. این جمله‌ها فقط نمونه‌اند. (اگر مدل راه را گم کرد، نامِ ابزار را صریح بگو.)</p>
+              <table class="tools-tbl">
+                <thead><tr><th>می‌خواهی</th><th>این را بنویس</th></tr></thead>
+                <tbody id="askRows"></tbody>
+              </table>
+              <h5 class="tools-h">ابزارهایی که منشی در اختیار مدل می‌گذارد</h5>
+              <ul class="tools-list" id="toolRows"></ul>
+            </div>
+          </details>
+
+          <details class="set-acc setup-trouble">
+            <summary class="set-summary">کار نکرد؟</summary>
+            <dl class="trouble">
+              <dt>ابزار می‌گوید سرور بالا نیامد</dt>
+              <dd><b>اول از همه مسیر Node را چک کن.</b> اگر در تنظیمات فقط <code>node</code> نوشته شده، برنامه‌های دسکتاپ پیدایش نمی‌کنند: آن‌ها مسیرِ ترمینال را به ارث نمی‌برند. مسیر کامل بگذار — خروجیِ <code>which node</code> روی مک و لینوکس، <code>where node</code> روی ویندوز. این شایع‌ترین دلیل است.</dd>
+              <dd>اگر Node اصلاً نصب نیست، <code>node -v</code> خطا می‌دهد؛ از <span dir="ltr">nodejs.org</span> نسخهٔ LTS را بگیر.</dd>
+              <dt>منشی در فهرست MCP نیست</dt>
+              <dd>ابزار را <b>کاملاً</b> ببند و باز کن. روی مک بستنِ پنجره کافی نیست — <kbd>Cmd</kbd>+<kbd>Q</kbd> بزن. بیشتر ابزارها تنظیمات را فقط موقع بالا آمدن می‌خوانند.</dd>
+              <dd>اگر باز هم نبود: فایلِ تنظیمات را دستی ویرایش کرده‌ای؟ وقتی فایل از قبل پر است، ادغامِ دستی جایی است که کار خراب می‌شود. «راهِ آسان» در گام ۲ را ببین — دستوری که خودِ ابزار فایل را با آن می‌نویسد و اشتباه نمی‌کند.</dd>
+              <dt>می‌گوید دستورِ codex یا claude را نمی‌شناسد</dt>
+              <dd>یعنی فقط اپِ گرافیکی را داری و ابزارِ خط‌فرمانش روی مسیر نیست. روی مک، Codex داخل خودِ اپ هست: به‌جای <code>codex</code> این را بگذار <span dir="ltr">/Applications/ChatGPT.app/Contents/Resources/codex</span>. اگر پیدا نشد، از «راهِ دستی» استفاده کن.</dd>
+              <dt>تنظیمات را گذاشتم ولی هیچ اتفاقی نیفتاد</dt>
+              <dd>احتمالاً «پوشهٔ خودِ منشی» و «پوشهٔ داده» را یکی گذاشته‌ای. اولی جایی است که فایل‌های برنامه‌اند، دومی جایی که <code>snapshot.json</code> نوشته می‌شود. اگر یکی باشند، سرور فایلِ خودش را پیدا نمی‌کند.</dd>
+              <dt>می‌گوید پوشهٔ داده پیدا نشد</dt>
+              <dd>مسیرِ گام ۱ اشتباه است یا <code>~</code> دارد و ابزار بازش نمی‌کند. مسیر کامل بگذار، از <code>/Users/</code> شروع.</dd>
+              <dt>می‌گوید snapshot.json نیست</dt>
+              <dd>در همین صفحه «نوشتن همین حالا» را بزن.</dd>
+              <dt>می‌گوید متنِ جلسه در فایل نیست</dt>
+              <dd>سطح جزئیات را روی «متن کامل» بگذار، بعد دوباره بنویس.</dd>
+              <dt>صورت‌جلسه ساخت ولی در منشی نیامد</dt>
+              <dd>باید همین صفحه باز باشد تا صندوق ورودی خوانده شود. صفحه را تازه کن؛ نوار در «امروز» می‌آید.</dd>
+            </dl>
+          </details>
+        </div>
       </div>
     </details>
 
-    <details class="set-acc">
-      <summary class="set-summary">پل منشی</summary>
-      <p class="hint">شناسهٔ اکستنشن منشی را وارد کنید تا اقدام‌های جلسه‌ها خودکار وارد وردست شوند. تا وقتی خالی است، هیچ اکستنشنی به وردست دسترسی ندارد.</p>
-      <label class="field"><span>شناسهٔ اکستنشن منشی</span><input type="text" id="setMonshi" dir="ltr" placeholder="مثل: abcdefghijklmnop…"></label>
+<details class="set-acc">
+      <summary class="set-summary">اتصال به اکستنشن منشیِ قدیمی</summary>
+      <p class="hint">فقط اگر <strong>نسخهٔ جداگانه و قدیمیِ منشی</strong> را هم نصب دارید. شناسه‌اش را وارد کنید تا کارهای جلسه‌ها خودکار به اینجا بیایند. تا وقتی خالی است <strong>هیچ اکستنشنی دسترسی ندارد</strong> — اگر نسخهٔ قدیمی را ندارید، خالی بگذاریدش.</p>
+      <label class="field"><span>شناسهٔ اکستنشن منشیِ قدیمی</span><input type="text" id="setMonshi" dir="ltr" placeholder="مثل: abcdefghijklmnop…"></label>
       <div class="btn-row"><button class="btn btn-primary" id="saveMonshi">ذخیره</button><span class="field-status" id="monshiStatus"></span></div>
     </details>
 
-    <details class="set-acc">
-      <summary class="set-summary">پشتیبان‌گیری</summary>
-      <p class="hint">همهٔ داده‌ها فقط روی این دستگاه است. برای جابه‌جایی به دستگاه دیگر یا محض احتیاط، یک فایل پشتیبان بگیرید.</p>
-      <label class="check-inline"><input type="checkbox" id="backupSecrets"><span>شامل اطلاعات حساس (کلید API و آدرس تقویم)</span></label>
-      <p class="hint hint-warn" id="backupWarn" hidden>⚠ فایل شامل کلید API و آدرس تقویم می‌شود؛ جای امن نگه‌ش دارید و برای کسی نفرستید.</p>
-      <div class="btn-row">
-        <button class="btn btn-primary" id="exportBtn">دریافت فایل پشتیبان</button>
-        <button class="btn btn-ghost" id="importBtn">بازگردانی از فایل</button>
-        <input type="file" id="importFile" accept="application/json,.json" hidden>
-        <span class="field-status" id="backupStatus"></span>
-      </div>
-    </details>
+    <h2 class="set-group">شخصی‌سازی</h2>
 
-    <details class="set-acc">
+<details class="set-acc">
       <summary class="set-summary">ترجیحات</summary>
       <label class="field"><span>نام شما (برای سلام صبحگاهی)</span><input type="text" id="setName" placeholder="مثلاً نگار"></label>
       <label class="field"><span>ایمیل شما</span><input type="email" id="setEmail" placeholder="مثلاً name@example.com" autocomplete="email">
@@ -495,7 +657,7 @@
       <div class="btn-row"><button class="btn btn-primary" id="savePrefs">ذخیره</button><span class="field-status" id="prefsStatus"></span></div>
     </details>
 
-    <details class="set-acc">
+<details class="set-acc">
       <summary class="set-summary">سربرگ صفحهٔ امروز</summary>
       <div class="field">
         <span>ساعتِ کدام شهرها دیده شود</span>
@@ -538,11 +700,11 @@
           <span class="feed-add-title">منبع خودت را اضافه کن</span>
           <div id="customFeedList" class="feed-list"></div>
           <div class="feed-row">
-            <input type="text" id="cfName" maxlength="40" placeholder="نام دلخواه (اختیاری)">
+            <input type="text" id="cfName" maxlength="40" placeholder="نام دلخواه (اختیاری)" aria-label="نام منبع خبر">
             <select id="cfCat" aria-label="دستهٔ منبع"></select>
           </div>
           <div class="feed-row">
-            <input type="url" id="cfUrl" dir="ltr" placeholder="https://example.com/feed">
+            <input type="url" id="cfUrl" dir="ltr" placeholder="https://example.com/feed" aria-label="آدرس فید خبر">
             <button type="button" class="btn btn-ghost btn-sm" id="cfAdd">افزودن</button>
           </div>
           <small class="field-hint">آدرسِ فید RSS یا Atom را بده — معمولاً <code dir="ltr">/feed</code> یا <code dir="ltr">/rss</code> انتهای آدرسِ سایت. عکسِ خبر هم اگر فید داشته باشد خودکار نشان داده می‌شود.</small>
@@ -552,7 +714,18 @@
       <div class="btn-row"><button class="btn btn-primary" id="saveHero">ذخیره</button><span class="field-status" id="heroStatus"></span></div>
     </details>
 
-    <details class="set-acc">
+<details class="set-acc">
+      <summary class="set-summary">قالب‌های صورت‌جلسه</summary>
+      <p class="hint">قالب‌های آماده همیشه هستند. می‌توانید قالب سفارشی خودتان را هم بسازید تا موقع ساخت صورت‌جلسه انتخابش کنید.</p>
+      <div id="tplList" class="ai-list"></div>
+      <div class="ai-editor">
+        <label class="field"><span>نام قالب</span><input type="text" id="tplName" maxlength="60" placeholder="مثلاً جلسهٔ کمیتهٔ محصول"></label>
+        <label class="field"><span>دستور قالب (روی چه چیزی تمرکز کند)</span><textarea id="tplInstructions" rows="3" maxlength="4000" placeholder="مثلاً روی تصمیم‌های محصول، ریسک انتشار و وابستگی‌های فنی تمرکز کن."></textarea></label>
+        <div class="btn-row"><button class="btn btn-primary" id="tplSave">ذخیره قالب</button><span class="field-status" id="tplStatus"></span></div>
+      </div>
+    </details>
+
+<details class="set-acc">
       <summary class="set-summary">میان‌برهای صفحه‌کلید</summary>
       <ul class="shortcut-list">
         <li><kbd>⌘</kbd><kbd>K</kbd> <span>جست‌وجوی سراسری و کارِ سریع</span></li>
@@ -562,6 +735,21 @@
         <li><kbd>Esc</kbd> <span>بستن پنجره یا منوی باز</span></li>
       </ul>
       <p class="field-hint">میان‌برهای تک‌حرفی وقتی داخل یک کادر متن می‌نویسی کار نمی‌کنند.</p>
+    </details>
+
+    <h2 class="set-group">داده</h2>
+
+<details class="set-acc">
+      <summary class="set-summary">پشتیبان‌گیری</summary>
+      <p class="hint">همهٔ داده‌ها فقط روی این دستگاه است. برای جابه‌جایی به دستگاه دیگر یا محض احتیاط، یک فایل پشتیبان بگیرید.</p>
+      <label class="check-inline"><input type="checkbox" id="backupSecrets"><span>شامل اطلاعات حساس (کلید API و آدرس تقویم)</span></label>
+      <p class="hint hint-warn" id="backupWarn" hidden>⚠ فایل شامل کلید API و آدرس تقویم می‌شود؛ جای امن نگه‌ش دارید و برای کسی نفرستید.</p>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="exportBtn">دریافت فایل پشتیبان</button>
+        <button class="btn btn-ghost" id="importBtn">بازگردانی از فایل</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+        <span class="field-status" id="backupStatus"></span>
+      </div>
     </details>
   </div>
   <p class="settings-foot">منشی هیچ سروری ندارد — همهٔ داده‌ها در حافظهٔ محلی مرورگر شماست. نکته: در نوار آدرس بنویسید «منشی» + فاصله تا از همان‌جا کار ثبت کنید.</p>
@@ -577,7 +765,7 @@
 <div class="modal-wrap" id="followupModal" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="fuTitle">
     <h2 id="fuTitle">پیش‌نویس یادآوری</h2>
-    <textarea id="fuText" rows="6"></textarea>
+    <textarea id="fuText" rows="6" aria-label="متن پیگیری"></textarea>
     <div class="btn-row">
       <button class="btn btn-primary" id="fuCopy">کپی پیام</button>
       <button class="btn btn-ghost" id="fuAi">بازنویسی با AI</button>
@@ -642,6 +830,108 @@
   </div>
 </div>
 
+<div class="modal-wrap" id="inboxModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="inboxTitle">
+    <h2 id="inboxTitle">صورت‌جلسه‌های رسیده</h2>
+    <p class="hint">این‌ها را ابزار بیرونی ساخته و در پوشهٔ پل گذاشته. تا تأیید نکنی چیزی در منشی ثبت نمی‌شود — یکی‌یکی نگاهشان کن.</p>
+    <p class="hint hint-warn" id="inboxWarn" hidden></p>
+    <div class="inbox-bulk">
+      <label class="check-inline"><input type="checkbox" id="inboxAll"><span>انتخابِ همه</span></label>
+      <span class="field-status" id="inboxCount"></span>
+    </div>
+    <div class="inbox-list" id="inboxList"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="inboxApply">اعمالِ انتخاب‌شده‌ها</button>
+      <button class="btn btn-ghost" id="inboxDiscard">دورریختنِ همه</button>
+      <button class="btn btn-ghost modal-close">بعداً</button>
+      <span class="field-status" id="inboxStatus"></span>
+    </div>
+  </div>
+</div>
+
+<div class="modal-wrap" id="ctxModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ctxTitle">
+    <h2 id="ctxTitle">بپرس از هوش مصنوعی</h2>
+
+    <!-- گام ۱: انتخاب کار -->
+    <div id="ctxStep1">
+      <p class="hint">منشی داده‌ات را آمادهٔ چسباندن در ChatGPT، Claude یا هر چت‌بات دیگری می‌کند. <strong>سؤال هم از قبل نوشته می‌شود</strong> — کافی است بچسبانی و Enter بزنی.</p>
+
+      <div class="recipe-list" id="ctxRecipes" role="radiogroup" aria-label="چه کاری می‌خواهی انجام دهی"></div>
+
+      <div id="ctxPicker" hidden>
+        <label class="field" id="ctxSessionWrap" hidden><span>کدام جلسه؟</span><select id="ctxSession"></select></label>
+        <label class="field" id="ctxPersonWrap" hidden><span>کدام نفر؟</span><select id="ctxPerson"></select></label>
+      </div>
+
+      <details class="set-acc ctx-adv" id="ctxAdv" hidden>
+        <summary class="set-summary">تنظیم دستی</summary>
+        <div class="field-row">
+          <label class="field"><span>چه بازه‌ای؟</span>
+            <select id="ctxScope">
+              <option value="today">امروز</option>
+              <option value="week" selected>هفتهٔ گذشته</option>
+              <option value="month">ماه گذشته</option>
+              <option value="open">کارهای باز</option>
+              <option value="unanalyzed">جلسه‌های بدون صورت‌جلسه</option>
+              <option value="session">یک جلسهٔ مشخص</option>
+              <option value="person">یک نفر</option>
+            </select>
+          </label>
+          <label class="field"><span>چقدر جزئیات؟</span>
+            <select id="ctxMode">
+              <option value="meta">فقط عنوان و تاریخ</option>
+              <option value="mom" selected>خلاصه و کارها</option>
+              <option value="full">متن کامل جلسه‌ها</option>
+            </select>
+          </label>
+        </div>
+      </details>
+
+      <div class="ctx-summary" id="ctxSummary" aria-live="polite"></div>
+      <p class="hint hint-warn" id="ctxWarn" hidden>⚠ متنِ کلمه‌به‌کلمهٔ جلسه‌ها در این بسته می‌آید — هرچه هر کسی گفته. قبل از چسباندن در سرویسی که به آن اعتماد ندارید یک بار نگاهش کنید.</p>
+
+      <details class="set-acc">
+        <summary class="set-summary">ببین دقیقاً چه چیزی کپی می‌شود</summary>
+        <pre class="report-text ctx-preview" id="ctxPreview"></pre>
+      </details>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="ctxCopy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>
+          کپی کن
+        </button>
+        <button class="btn btn-ghost modal-close">بستن</button>
+        <span class="field-status" id="ctxStatus"></span>
+      </div>
+    </div>
+
+    <!-- گام ۲: بعد از کپی — کاربر نباید اینجا تنها بماند -->
+    <div id="ctxStep2" hidden>
+      <p class="ctx-done">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 12.5l5 5 10-11"/></svg>
+        کپی شد — حالا سه قدم مانده
+      </p>
+      <ol class="ctx-steps">
+        <li><span class="ctx-num">۱</span><div>یکی از این‌ها را باز کن:
+          <span class="ctx-links">
+            <a class="btn btn-ghost" href="https://chatgpt.com" target="_blank" rel="noopener noreferrer">ChatGPT</a>
+            <a class="btn btn-ghost" href="https://claude.ai" target="_blank" rel="noopener noreferrer">Claude</a>
+            <a class="btn btn-ghost" href="https://gemini.google.com" target="_blank" rel="noopener noreferrer">Gemini</a>
+          </span>
+        </div></li>
+        <li><span class="ctx-num">۲</span><div>در کادر چت بچسبان — <kbd>⌘V</kbd> یا <kbd>Ctrl+V</kbd></div></li>
+        <li><span class="ctx-num">۳</span><div><strong>Enter بزن.</strong> سؤال داخل همان متن نوشته شده؛ لازم نیست چیزی تایپ کنی.</div></li>
+      </ol>
+      <p class="hint" id="ctxAskEcho"></p>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="ctxBack">برگرد و کار دیگری بساز</button>
+        <button class="btn btn-primary modal-close">تمام</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- جستجوی سراسری / کامند پالت -->
 <div class="modal-wrap cmd-wrap" id="cmdPalette" hidden>
   <div class="cmd" role="dialog" aria-modal="true" aria-label="جستجوی سراسری">
@@ -666,6 +956,10 @@
 <script src="core/update.js"></script>
 <script src="core/market.js"></script>
 <script src="core/mom-core.js"></script>
+<script src="core/agenda.js"></script>
+<script src="core/snapshot.js"></script>
+<script src="core/inbox.js"></script>
+<script src="core/mcp-tools.js"></script>
 <script src="core/store.js"></script>
 <script src="app.js"></script>
 </body>

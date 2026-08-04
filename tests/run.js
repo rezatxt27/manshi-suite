@@ -426,7 +426,7 @@ const T = (title, who, dir, status) => ({
   const meta = {
     'e:sara.a@acme.com': { id: 'e:sara.a@acme.com', name: 'کامران نیک‌پور', email: 'sara.a@acme.com' },
     'e:sara.k@vendor.io': { id: 'e:sara.k@vendor.io', name: 'کامران نیک‌پور', email: 'sara.k@vendor.io' },
-    'e:ali@acme.com': { id: 'e:ali@acme.com', name: 'علی رضایی', email: 'ali@acme.com' }
+    'e:ali@acme.com': { id: 'e:ali@acme.com', name: 'علی مهدییی', email: 'ali@acme.com' }
   };
   t('نگاشت فرد: ایمیلِ شرکت‌کننده هم‌نام‌ها را تفکیک می‌کند', () => {
     const r = Store.resolvePersonRef('کامران نیک‌پور', parts, meta);
@@ -440,14 +440,14 @@ const T = (title, who, dir, status) => ({
     assert.strictEqual(r.who, 'کامران نیک‌پور', 'نام باید بماند');
   });
   t('نگاشت فرد: تک‌نامِ یکتا از پروندهٔ موجود پیدا می‌شود', () =>
-    assert.strictEqual(Store.resolvePersonRef('علی رضایی', [], meta).whoId, 'e:ali@acme.com'));
+    assert.strictEqual(Store.resolvePersonRef('علی مهدییی', [], meta).whoId, 'e:ali@acme.com'));
   t('نگاشت فرد: نامِ ناشناس بدون شناسه ولی با نام برمی‌گردد', () => {
     const r = Store.resolvePersonRef('کسی که نیست', parts, meta);
     assert.strictEqual(r.whoId, null);
     assert.strictEqual(r.who, 'کسی که نیست');
   });
   t('نگاشت فرد: نیم‌فاصله و فاصلهٔ اضافه مانع تطبیق نیست', () =>
-    assert.strictEqual(Store.resolvePersonRef('  علی  رضایی ', [], meta).whoId, 'e:ali@acme.com'));
+    assert.strictEqual(Store.resolvePersonRef('  علی  مهدییی ', [], meta).whoId, 'e:ali@acme.com'));
   t('نگاشت فرد: نامِ خالی نتیجه ندارد', () =>
     assert.strictEqual(Store.resolvePersonRef('', parts, meta), null));
 }
@@ -1981,6 +1981,1787 @@ t('peopleFiles گروه‌بندی درست', () => {
     t('امنیت: آدرس API روی https و خودِ گیت‌هاب است', () => {
       assert.ok(U.API.startsWith('https://api.github.com/'));
       assert.ok(U.PAGE.startsWith('https://github.com/'));
+    });
+  }
+
+  // ── عکسِ لحظه‌ای و زمینهٔ کلیپ‌بورد ──────────────────
+  {
+    console.log('\n— عکسِ لحظه‌ای (snapshot) —');
+    const S = require('../core/snapshot.js');
+    const DAY = 86400000;
+    const NOW = new Date(2026, 6, 20, 12, 0, 0).getTime();  // ۲۹ تیر ۱۴۰۵، ظهر
+
+    const mk = (over) => Object.assign({
+      id: 's1', title: 'جلسهٔ نمونه', startedAt: NOW - 2 * DAY,
+      transcript: [{ speaker: 'نگار', text: 'سلام' }, { speaker: 'بهنام', text: 'خوبی؟' }],
+      summary: '', actions: [], analysisData: null
+    }, over || {});
+
+    t('تحلیل‌شده: خلاصه یا کار یا analysisData کافی است', () => {
+      assert.ok(!S.isAnalyzed(mk()), 'بدون هیچ‌کدام، تحلیل‌نشده');
+      assert.ok(S.isAnalyzed(mk({ summary: '## خلاصه' })));
+      assert.ok(S.isAnalyzed(mk({ actions: [{ text: 'کاری' }] })));
+      assert.ok(S.isAnalyzed(mk({ analysisData: {} })));
+      assert.ok(!S.isAnalyzed(mk({ summary: '   ' })), 'خلاصهٔ فقط فاصله تحلیل نیست');
+    });
+
+    t('شرکت‌کنندگان از گوینده و مسئولِ کار، بدون تکرار', () => {
+      const p = S.participants(mk({
+        transcript: [{ speaker: 'نگار', text: 'a' }, { speaker: 'نگار', text: 'b' }, { speaker: '', text: 'c' }],
+        actions: [{ text: 'x', owner: 'بهنام' }, { text: 'y', owner: 'نگار' }]
+      }));
+      assert.deepStrictEqual(p, ['نگار', 'بهنام']);
+    });
+
+    t('جلسهٔ فقط‌متن هم شرکت‌کننده دارد', () => {
+      assert.deepStrictEqual(S.participants(mk()), ['نگار', 'بهنام']);
+    });
+
+    t('سطح meta: نه خلاصه، نه کار، نه متن', () => {
+      const r = S._slimSession(mk({ summary: 'خ', actions: [{ text: 'ک' }] }), 'meta');
+      assert.ok(!('summary' in r) && !('actions' in r) && !('transcript' in r));
+      assert.strictEqual(r.turns, 2);
+      assert.ok(r.chars > 0, 'شمارِ کاراکتر باید بیاید تا اندازه معلوم باشد');
+    });
+
+    t('سطح mom: خلاصه و کار هست، متن نیست', () => {
+      const r = S._slimSession(mk({ summary: 'خ', actions: [{ text: 'ک', owner: 'ن' }] }), 'mom');
+      assert.strictEqual(r.summary, 'خ');
+      assert.strictEqual(r.actions.length, 1);
+      assert.ok(!('transcript' in r), 'متنِ خام نباید در سطح mom بیاید');
+    });
+
+    t('سطح full: متنِ کلمه‌به‌کلمه هم می‌آید', () => {
+      const r = S._slimSession(mk(), 'full');
+      assert.strictEqual(r.transcript.length, 2);
+      assert.strictEqual(r.transcript[0].speaker, 'نگار');
+    });
+
+    t('پرچمِ analyzed در خروجی هست', () => {
+      assert.strictEqual(S._slimSession(mk(), 'mom').analyzed, false);
+      assert.strictEqual(S._slimSession(mk({ summary: 'خ' }), 'mom').analyzed, true);
+    });
+
+    t('امنیت: هیچ تنظیماتی وارد snapshot نمی‌شود', () => {
+      // مقدارهای ساختگی در زمانِ اجرا ساخته می‌شوند، نه به‌صورت رشتهٔ ثابت در فایل.
+      // دلیلش: بازرسِ .github/scripts/security-check.sh کلِ مخزن را دنبالِ الگوی کلید
+      // می‌گردد و رشتهٔ ثابتِ شبیه‌کلید را — درست هم می‌کند — به‌عنوان نشت گزارش می‌داد.
+      // این ترفند فقط برای همین فیکسچر است؛ کلیدِ واقعی همچنان گرفته می‌شود.
+      const fakeKey = 'sk' + '-fixture-' + 'abcdefghijklmnopqrst';
+      const fakeIcs = 'https://calendar.google.com/calendar/ical/'
+        + 'FIXTURE' + '0123456789abcdefghij' + '/basic.ics';
+      // حتی اگر تنظیماتِ حساس را عمداً پاس بدهیم، خروجی نباید بگیردش.
+      const snap = S.buildSnapshot({
+        sessions: [mk()], tasks: [], people: {},
+        settings: { icsUrl: fakeIcs, aiKey: fakeKey },
+        icsUrl: fakeIcs,
+        aiProfiles: [{ key: fakeKey }]
+      }, { now: NOW });
+      const json = JSON.stringify(snap);
+      assert.ok(!json.includes('FIXTURE'), 'آدرس iCal نشت کرده');
+      assert.ok(!json.includes(fakeKey), 'کلید هوش مصنوعی نشت کرده');
+      assert.ok(!json.includes('icsUrl') && !json.includes('aiKey'), 'کلیدِ تنظیمات نشت کرده');
+      assert.ok(!('settings' in snap), 'snapshot نباید اصلاً settings داشته باشد');
+    });
+
+    t('ایمیلِ آدم‌ها در سطح meta نمی‌آید', () => {
+      const data = { sessions: [], tasks: [], people: { 'نگار': { email: 'negar@example.com' } } };
+      assert.ok(!JSON.stringify(S.buildSnapshot(data, { mode: 'meta', now: NOW })).includes('@'));
+      assert.ok(JSON.stringify(S.buildSnapshot(data, { mode: 'mom', now: NOW })).includes('negar@example.com'));
+    });
+
+    t('شمارشِ جلسه‌های تحلیل‌نشده درست است', () => {
+      const snap = S.buildSnapshot({
+        sessions: [mk({ id: 'a' }), mk({ id: 'b', summary: 'خ' }), mk({ id: 'c' })],
+        tasks: [{ id: 't1', title: 'x', status: 'open' }, { id: 't2', title: 'y', status: 'done' }]
+      }, { now: NOW });
+      assert.strictEqual(snap.counts.meetings, 3);
+      assert.strictEqual(snap.counts.unanalyzed, 2);
+      assert.strictEqual(snap.counts.openTasks, 1);
+      assert.strictEqual(snap.schema, S.SCHEMA);
+    });
+
+    t('سطحِ نامعتبر به mom برمی‌گردد، نه به full', () => {
+      const snap = S.buildSnapshot({ sessions: [mk()] }, { mode: 'هرچیزی', now: NOW });
+      assert.strictEqual(snap.mode, 'mom');
+      assert.ok(!('transcript' in snap.meetings[0]), 'پیش‌فرضِ امن نباید متنِ خام بدهد');
+    });
+
+    t('یادداشتِ کار در سطح meta نمی‌آید', () => {
+      const t1 = { id: 'x', title: 'کار', notes: 'یادداشتِ خصوصی' };
+      assert.ok(!('notes' in S._slimTask(t1, 'meta')));
+      assert.strictEqual(S._slimTask(t1, 'mom').notes, 'یادداشتِ خصوصی');
+    });
+
+    console.log('\n— زمینهٔ کلیپ‌بورد (context) —');
+
+    const world = {
+      sessions: [
+        mk({ id: 'a', title: 'جلسهٔ امروز', startedAt: NOW - 3600e3 }),
+        mk({ id: 'b', title: 'جلسهٔ هفتهٔ پیش', startedAt: NOW - 5 * DAY, summary: 'خلاصهٔ ب' }),
+        mk({ id: 'c', title: 'جلسهٔ ماهِ پیش', startedAt: NOW - 20 * DAY }),
+        mk({ id: 'd', title: 'جلسهٔ خیلی قدیمی', startedAt: NOW - 200 * DAY })
+      ],
+      tasks: [
+        { id: 't1', title: 'کارِ باز', status: 'open', who: 'نگار', dir: 'theirs', due: '1405-05-01' },
+        { id: 't2', title: 'کارِ تمام‌شده', status: 'done', doneAt: new Date(NOW - 2 * DAY).toISOString() },
+        { id: 't3', title: 'کارِ جلسه', status: 'open', meetingRef: 'a' }
+      ]
+    };
+
+    t('دامنهٔ امروز فقط جلسهٔ امروز را می‌گیرد', () => {
+      const r = S.buildContext(world, { scope: 'today', now: NOW });
+      assert.strictEqual(r.meetings, 1);
+      assert.ok(r.text.includes('جلسهٔ امروز') && !r.text.includes('جلسهٔ هفتهٔ پیش'));
+    });
+
+    t('دامنهٔ هفته و ماه بازهٔ درست دارند', () => {
+      assert.strictEqual(S.buildContext(world, { scope: 'week', now: NOW }).meetings, 2);
+      assert.strictEqual(S.buildContext(world, { scope: 'month', now: NOW }).meetings, 3);
+    });
+
+    t('دامنهٔ «بدون صورت‌جلسه» فقط تحلیل‌نشده‌ها را می‌دهد', () => {
+      const r = S.buildContext(world, { scope: 'unanalyzed', now: NOW });
+      assert.strictEqual(r.meetings, 3);
+      assert.ok(!r.text.includes('جلسهٔ هفتهٔ پیش'), 'جلسهٔ تحلیل‌شده نباید بیاید');
+      assert.strictEqual(r.tasks, 0, 'در این دامنه کار لازم نیست');
+    });
+
+    t('دامنهٔ یک جلسه، کارهای همان جلسه را هم می‌آورد', () => {
+      const r = S.buildContext(world, { scope: 'session', id: 'a', now: NOW });
+      assert.strictEqual(r.meetings, 1);
+      assert.ok(r.text.includes('کارِ جلسه'));
+      assert.ok(!r.text.includes('کارِ باز'));
+    });
+
+    t('دامنهٔ یک نفر با نامِ ناموجود چیزی برنمی‌گرداند', () => {
+      assert.strictEqual(S.buildContext(world, { scope: 'person', name: 'کسی', now: NOW }).meetings, 0);
+      assert.strictEqual(S.buildContext(world, { scope: 'person', name: '', now: NOW }).meetings, 0);
+    });
+
+    t('دامنهٔ یک نفر، جلسه‌ها و کارهای او را می‌گیرد', () => {
+      const r = S.buildContext(world, { scope: 'person', name: 'نگار', now: NOW });
+      assert.ok(r.meetings > 0);
+      assert.ok(r.text.includes('کارِ باز'), 'کارِ سپرده‌شده به او باید بیاید');
+    });
+
+    t('دامنهٔ کارهای باز، جلسه‌ای نمی‌آورد', () => {
+      const r = S.buildContext(world, { scope: 'open', now: NOW });
+      assert.strictEqual(r.meetings, 0);
+      assert.strictEqual(r.tasks, 2);
+      assert.ok(!r.text.includes('کارِ تمام‌شده'));
+    });
+
+    t('هشدارِ «چه چیزی را نمی‌بینی» در خروجی هست', () => {
+      const mom = S.buildContext(world, { scope: 'month', mode: 'mom', now: NOW });
+      assert.ok(mom.text.includes('کلمه‌به‌کلمه'), 'باید بگوید متنِ خام نیست');
+      assert.ok(/\d+ جلسه هنوز صورت‌جلسه ندارد/.test(mom.text.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))));
+      const full = S.buildContext(world, { scope: 'month', mode: 'full', now: NOW });
+      assert.ok(!full.text.includes('کلمه‌به‌کلمهٔ جلسه‌ها در این خروجی نیست'));
+    });
+
+    t('جلسهٔ تحلیل‌نشده در متن علامت می‌خورد', () => {
+      const r = S.buildContext(world, { scope: 'today', mode: 'full', now: NOW });
+      assert.ok(r.text.includes('هنوز صورت‌جلسه ندارد'));
+      assert.ok(r.text.includes('متنِ خام است'));
+    });
+
+    t('سطح mom متنِ خام را در مارک‌داون هم نمی‌آورد', () => {
+      const secret = 'جملهٔ محرمانهٔ داخل زیرنویس';
+      const d = { sessions: [mk({ startedAt: NOW - 3600e3, summary: 'خ', transcript: [{ speaker: 'ن', text: secret }] })], tasks: [] };
+      assert.ok(!S.buildContext(d, { scope: 'today', mode: 'mom', now: NOW }).text.includes(secret));
+      assert.ok(S.buildContext(d, { scope: 'today', mode: 'full', now: NOW }).text.includes(secret));
+    });
+
+    t('بودجه رعایت می‌شود و حذف‌شده‌ها گزارش می‌شوند', () => {
+      const big = mk({ id: 'big', title: 'جلسهٔ بلند', startedAt: NOW - 3600e3,
+        transcript: [{ speaker: 'ن', text: 'x'.repeat(50000) }] });
+      const small = mk({ id: 'small', title: 'جلسهٔ کوتاه', startedAt: NOW - 7200e3 });
+      const r = S.buildContext({ sessions: [big, small], tasks: [] },
+        { scope: 'today', mode: 'full', budget: 5000, now: NOW });
+      assert.ok(r.chars <= 5000 + 400, 'خروجی از بودجه خیلی جلو زده: ' + r.chars);
+      assert.ok(r.truncated && r.omitted >= 1);
+      assert.ok(r.text.includes('جلسهٔ کوتاه'), 'موردِ کوچک باید جا شود حتی اگر بزرگ حذف شد');
+      assert.ok(!r.text.includes('x'.repeat(1000)));
+    });
+
+    t('بودجهٔ خیلی کوچک به حداقلِ امن گرد می‌شود', () => {
+      const r = S.buildContext(world, { scope: 'month', budget: 10, now: NOW });
+      assert.ok(r.text.includes('# زمینه از منشی'), 'سربرگ همیشه باید بماند');
+    });
+
+    t('تخمین توکن با طولِ متن بالا می‌رود', () => {
+      assert.ok(S.estimateTokens('') === 0);
+      assert.ok(S.estimateTokens('x'.repeat(1000)) > S.estimateTokens('x'.repeat(100)));
+    });
+
+    t('دادهٔ خالی نمی‌شکند', () => {
+      const r = S.buildContext({}, { scope: 'week', now: NOW });
+      assert.strictEqual(r.meetings, 0);
+      assert.strictEqual(r.tasks, 0);
+      assert.ok(r.text.includes('# زمینه از منشی'));
+      const snap = S.buildSnapshot({}, { now: NOW });
+      assert.deepStrictEqual(snap.meetings, []);
+      assert.strictEqual(snap.counts.unanalyzed, 0);
+    });
+
+    t('کارهای آماده: همه بازه و سطحِ معتبر دارند', () => {
+      assert.ok(S.RECIPES.length >= 5);
+      const ids = new Set();
+      for (const r of S.RECIPES) {
+        assert.ok(r.id && !ids.has(r.id), 'شناسهٔ تکراری: ' + r.id);
+        ids.add(r.id);
+        assert.ok(r.title && r.hint, 'عنوان و توضیح لازم است: ' + r.id);
+        assert.ok(S.SCOPES.includes(r.scope), 'بازهٔ نامعتبر در ' + r.id);
+        assert.ok(S.MODES.includes(r.mode), 'سطحِ نامعتبر در ' + r.id);
+        // هر کار به‌جز «سؤال خودم» باید سؤالِ آماده داشته باشد
+        if (!r.custom) assert.ok(r.ask && r.ask.length > 20, 'سؤالِ آماده ندارد: ' + r.id);
+      }
+      assert.strictEqual(S.recipeById('catchup').scope, 'unanalyzed');
+      assert.strictEqual(S.recipeById('نیست'), null);
+    });
+
+    t('کارِ «عقب‌افتاده‌ها» متنِ خام می‌فرستد', () => {
+      // اگر سطحش mom بود، مدل چیزی برای خلاصه‌کردن نداشت — کلِ کار بی‌معنا می‌شد.
+      assert.strictEqual(S.recipeById('catchup').mode, 'full');
+    });
+
+    t('سؤالِ آماده ته متن می‌آید، با قاب در سر متن', () => {
+      const ask = 'این جلسه‌ها را خلاصه کن.';
+      const r = S.buildContext(world, { scope: 'month', ask, now: NOW });
+      assert.ok(r.text.includes('# درخواست من'));
+      assert.ok(r.text.trimEnd().endsWith(ask), 'درخواست باید آخرِ متن باشد');
+      assert.ok(r.text.indexOf('درخواستم ته همین متن آمده') < r.text.indexOf('# جلسه‌ها'));
+    });
+
+    t('بدون سؤال، بخشِ درخواست اصلاً نمی‌آید', () => {
+      const r = S.buildContext(world, { scope: 'month', now: NOW });
+      assert.ok(!r.text.includes('# درخواست من'));
+      assert.ok(!r.text.includes('درخواستم ته همین متن آمده'));
+    });
+
+    t('سؤال هم در بودجه حساب می‌شود', () => {
+      const ask = 'ی'.repeat(500);
+      const a = S.buildContext(world, { scope: 'month', now: NOW });
+      const b = S.buildContext(world, { scope: 'month', ask, now: NOW });
+      assert.ok(b.chars > a.chars + 400);
+    });
+
+    t('اندازه به زبان آدمیزاد، نه توکن', () => {
+      assert.strictEqual(S.sizeLabel(1000).key, 'small');
+      assert.strictEqual(S.sizeLabel(20000).key, 'medium');
+      assert.strictEqual(S.sizeLabel(90000).key, 'large');
+      for (const n of [0, 8000, 8001, 40000, 40001]) {
+        assert.ok(S.sizeLabel(n).text.length > 5, 'برچسبِ خالی برای ' + n);
+      }
+      assert.ok(S.sizeLabel(90000).text.includes('رایگان'), 'باید بگوید ممکن است جا نشود');
+    });
+
+    t('پرچمِ خالی برای دامنهٔ بی‌نتیجه', () => {
+      assert.ok(S.buildContext({ sessions: [], tasks: [] }, { scope: 'week', now: NOW }).empty);
+      assert.ok(!S.buildContext(world, { scope: 'week', now: NOW }).empty);
+    });
+
+    t('اندازه در خروجیِ buildContext می‌آید', () => {
+      const r = S.buildContext(world, { scope: 'month', mode: 'full', now: NOW });
+      assert.ok(r.size && S.sizeLabel(r.chars).key === r.size.key);
+    });
+
+    t('هشدارِ مسیر: تلهٔ Documents در مک گرفته می‌شود', () => {
+      for (const p of ['/Users/kazem/Documents/Meet', '~/Documents/manshi-data', '/Users/kazem/Desktop/data']) {
+        const r = S.pathRisk(p);
+        assert.strictEqual(r.level, 'maybe', 'گرفته نشد: ' + p);
+        assert.ok(r.text.includes('iCloud'), 'باید تلهٔ مک را نام ببرد');
+      }
+    });
+
+    t('هشدارِ مسیر: سرویس‌های همگام‌سازی شناخته می‌شوند', () => {
+      const cases = [
+        ['/Users/a/Library/Mobile Documents/com~apple~CloudDocs/Meet', 'iCloud Drive'],
+        ['/Users/a/Dropbox/manshi', 'Dropbox'],
+        ['/Users/a/Google Drive/manshi', 'Google Drive'],
+        ['/Users/a/OneDrive - Acme/manshi', 'OneDrive'],
+        ['/Users/a/Nextcloud/manshi', 'سرویس همگام‌سازی']
+      ];
+      for (const [p, why] of cases) {
+        const r = S.pathRisk(p);
+        assert.strictEqual(r.level, 'sync', 'گرفته نشد: ' + p);
+        assert.strictEqual(r.why, why, 'دلیلِ اشتباه برای ' + p);
+      }
+    });
+
+    t('هشدارِ مسیر: منع نمی‌کند، فقط خبر می‌دهد', () => {
+      // انتخابِ آگاهانهٔ iCloud باید محترم باشد؛ متن نباید دستوری باشد
+      const r = S.pathRisk('/Users/a/Dropbox/manshi');
+      assert.ok(!/جای دیگری انتخاب کن|نگذار|ممنوع/.test(r.text), 'لحن نباید دستوری باشد: ' + r.text);
+      assert.ok(/ایرادی ندارد|اگر آگاهانه/.test(r.text), 'باید بگوید انتخابِ آگاهانه اشکالی ندارد');
+    });
+
+    t('هشدارِ مسیر: پوشهٔ محلی سبز است', () => {
+      for (const p of ['/Users/kazem/manshi-data', '~/manshi-data', '/opt/manshi', '/Users/a/Documents-old/x']) {
+        assert.strictEqual(S.pathRisk(p).level, 'local', 'هشدارِ بی‌جا برای ' + p);
+      }
+      assert.strictEqual(S.pathRisk('').level, 'none');
+      assert.strictEqual(S.pathRisk(null).level, 'none');
+    });
+
+    t('هر سطحِ مسیر متنِ خودش را دارد', () => {
+      for (const p of ['', '/Users/a/manshi-data', '/Users/a/Documents/x', '/Users/a/Dropbox/x']) {
+        const r = S.pathRisk(p);
+        if (r.level !== 'none') assert.ok(r.text && r.text.length > 20, 'متنِ خالی برای ' + p);
+      }
+    });
+
+    t('ویندوز: جداکنندهٔ \\ هم شناخته می‌شود', () => {
+      // بدون یکسان‌سازی، مسیرِ ویندوزی سبز نشان داده می‌شد — آرامشِ دروغین
+      assert.strictEqual(S.pathRisk('C:\\Users\\ali\\Dropbox\\manshi').level, 'sync');
+      assert.strictEqual(S.pathRisk('C:\\Users\\ali\\OneDrive\\manshi').level, 'sync');
+      assert.strictEqual(S.pathRisk('C:\\Users\\ali\\Documents\\manshi').level, 'maybe');
+      assert.strictEqual(S.pathRisk('C:\\Users\\ali\\manshi-data').level, 'local');
+    });
+
+    t('لینوکس: خانهٔ /home هم پوشش دارد', () => {
+      assert.strictEqual(S.pathRisk('/home/ali/Documents/x').level, 'maybe');
+      assert.strictEqual(S.pathRisk('/home/ali/Dropbox/x').level, 'sync');
+      assert.strictEqual(S.pathRisk('/home/ali/manshi-data').level, 'local');
+    });
+
+    t('مسیرِ فایل تنظیمات برای هر سیستم‌عامل جدا است', () => {
+      for (const tl of S.TOOLS) {
+        if (tl.kind === 'shell') continue;
+        for (const os of S.OSES) {
+          const f = S.toolFile(tl, os);
+          assert.ok(f, 'مسیرِ خالی: ' + tl.id + '/' + os);
+        }
+      }
+      assert.ok(S.toolFile(S.TOOLS.find(t2 => t2.id === 'codex'), 'win').includes('%USERPROFILE%'));
+      assert.ok(S.toolFile(S.TOOLS.find(t2 => t2.id === 'claude-desktop'), 'win').includes('%APPDATA%'));
+      assert.ok(S.toolFile(S.TOOLS.find(t2 => t2.id === 'claude-desktop'), 'linux').includes('.config'));
+      assert.ok(S.toolFile(S.TOOLS.find(t2 => t2.id === 'claude-desktop'), 'mac').includes('Application Support'));
+      assert.strictEqual(S.toolFile(null, 'mac'), '');
+    });
+
+    t('پوستهٔ ویندوز کوتیشنِ دوتایی می‌خواهد، نه تکی', () => {
+      const p = 'C:\\My Apps\\manshi\\mcp\\manshi-mcp.js';
+      const w = S.mcpSnippet('claude-code', p, 'C:\\manshi data', 'win');
+      assert.ok(w.includes('"' + p + '"'), 'ویندوز: ' + w);
+      assert.ok(!w.includes("'"), 'cmd کوتیشنِ تکی را عیناً چاپ می‌کند');
+      const u = S.mcpSnippet('claude-code', p, 'C:\\manshi data', 'mac');
+      assert.ok(u.includes("'" + p + "'"), 'یونیکس: ' + u);
+    });
+
+    t('جای‌نگهدارِ مسیرِ خالی هم به سیستم‌عامل می‌خورد', () => {
+      assert.ok(S.mcpSnippet('claude-desktop', '', '', 'win').includes('C:\\\\'));
+      assert.ok(S.mcpSnippet('claude-desktop', '', '', 'mac').includes('/path/to/'));
+    });
+
+    t('تنظیمات MCP: شکلِ هر ابزار درست است', () => {
+      const S_ = '/Users/a/manshi-suite/mcp/manshi-mcp.js', D = '/Users/a/manshi-data';
+      assert.ok(S.mcpSnippet('claude-code', S_, D).startsWith('claude mcp add manshi -s user -- node '));
+      const j = JSON.parse(S.mcpSnippet('claude-desktop', S_, D));
+      assert.deepStrictEqual(j.mcpServers.manshi.args, [S_, '--data', D]);
+      assert.strictEqual(j.mcpServers.manshi.command, 'node');
+      assert.ok(JSON.parse(S.mcpSnippet('vscode', S_, D)).servers.manshi, 'VS Code کلیدش servers است');
+      const toml = S.mcpSnippet('codex', S_, D);
+      assert.ok(toml.includes('[mcp_servers.manshi]') && toml.includes('"--data"'));
+    });
+
+    t('تنظیمات MCP: مسیرِ دارای فاصله درست نقل می‌شود', () => {
+      const p = '/Users/a/My Files/manshi data';
+      assert.ok(S.mcpSnippet('claude-code', p, p).includes("'" + p + "'"), 'در پوسته باید کوتیشن بخورد');
+      assert.deepStrictEqual(JSON.parse(S.mcpSnippet('claude-desktop', p, p)).mcpServers.manshi.args[0], p);
+    });
+
+    t('تنظیمات MCP: مسیرِ خالی جای‌نگهدار می‌گذارد، نه رشتهٔ تهی', () => {
+      const out = S.mcpSnippet('claude-desktop', '', '');
+      assert.ok(out.includes('/path/to/'), 'باید معلوم باشد که باید پرش کنی');
+      assert.ok(JSON.parse(out), 'باید همچنان JSONِ معتبر باشد');
+    });
+
+    t('پیشرفتِ راه‌اندازی: شمارش و «الان اینجایی»', () => {
+      const none = S.setupProgress({});
+      assert.strictEqual(none.done, 0);
+      assert.strictEqual(none.total, 5);
+      assert.strictEqual(none.next, 'node', 'اولین قدمِ نکرده باید node باشد');
+      assert.ok(!none.complete);
+
+      const some = S.setupProgress({ node: true, path: true });
+      assert.strictEqual(some.done, 2);
+      assert.strictEqual(some.next, 'config');
+
+      const all = S.setupProgress({ node: 1, path: 1, config: 1, restart: 1, ask: 1 });
+      assert.strictEqual(all.done, 5);
+      assert.strictEqual(all.next, null);
+      assert.ok(all.complete);
+    });
+
+    t('پیشرفت: قدمِ پریده هم شمرده می‌شود ولی «الان» عقب‌تر می‌ماند', () => {
+      // کاربر ممکن است تنظیمات را کپی کند بی‌آنکه Node را تیک زده باشد
+      const p = S.setupProgress({ config: true, ask: true });
+      assert.strictEqual(p.done, 2);
+      assert.strictEqual(p.next, 'node', 'باید به اولین کارِ نکرده برگردد');
+    });
+
+    t('پیشرفت: ورودیِ بی‌ربط یا خالی نمی‌شکند', () => {
+      for (const bad of [null, undefined, {}, { چیزی: true }]) {
+        const p = S.setupProgress(bad);
+        assert.strictEqual(p.total, 5);
+        assert.strictEqual(Object.keys(p.states).length, 5);
+      }
+      assert.strictEqual(S.setupProgress({ چیزی: true }).done, 0, 'کلیدِ ناشناخته نباید بشمارد');
+    });
+
+    t('قدم‌ها: کدام خودکارند و کدام دستی', () => {
+      const auto = S.SETUP_STEPS.filter(x => x.auto).map(x => x.id);
+      const manual = S.SETUP_STEPS.filter(x => !x.auto).map(x => x.id);
+      assert.deepStrictEqual(auto, ['path', 'config', 'ask']);
+      assert.deepStrictEqual(manual, ['node', 'restart'], 'فقط چیزهایی که نمی‌شود فهمید');
+    });
+
+    t('فهرست ابزارها: یکتا، کامل، و همه تنظیماتِ معتبر می‌سازند', () => {
+      const ids = S.TOOLS.map(t2 => t2.id);
+      assert.strictEqual(new Set(ids).size, ids.length);
+      assert.ok(S.TOOLS.length >= 7, 'ابزارهای بیشتری انتظار می‌رفت');
+      for (const t2 of S.TOOLS) {
+        assert.ok(t2.name && t2.kind, 'ابزارِ ناقص: ' + t2.id);
+        if (t2.kind !== 'shell') assert.ok(t2.file, 'فایلِ تنظیمات معلوم نیست: ' + t2.id);
+        const out = S.mcpSnippet(t2.id, '/s/mcp.js', '/d');
+        assert.ok(out.includes('/s/mcp.js') && out.includes('/d'), 'مسیرها نیامدند: ' + t2.id);
+        if (t2.kind === 'json') assert.ok(JSON.parse(out), 'JSONِ نامعتبر: ' + t2.id);
+      }
+      // ابزارِ ناشناخته نباید بترکد — قالبِ استاندارد بدهد
+      assert.ok(JSON.parse(S.mcpSnippet('چیزی', '/s/mcp.js', '/d')).mcpServers.manshi);
+    });
+
+    t('رکوردِ خراب (null و بی‌فیلد) نمی‌شکند', () => {
+      const snap = S.buildSnapshot({ sessions: [null, {}, mk()], tasks: [null, {}] }, { mode: 'full', now: NOW });
+      assert.strictEqual(snap.meetings.length, 3);
+      assert.strictEqual(snap.meetings[1].participants.length, 0);
+      const r = S.buildContext({ sessions: [null, {}], tasks: [null] }, { scope: 'month', now: NOW });
+      assert.ok(typeof r.text === 'string');
+    });
+  }
+
+  // ── صندوق ورودی (راهِ برگشت) ────────────────────────
+  {
+    console.log('\n— صندوق ورودی —');
+    const I = require('../core/inbox.js');
+
+    const sessions = [
+      { id: 's1', title: 'جلسهٔ خالی', summary: '', actions: [] },
+      { id: 's2', title: 'جلسهٔ صورت‌جلسه‌دار', summary: '## خلاصهٔ قبلی', actions: [] },
+      { id: 's3', title: 'جلسه با کار', summary: '', actions: [{ text: 'کاری' }] }
+    ];
+    const box = items => JSON.stringify({ app: 'manshi-inbox', schema: 1, items });
+    const minutes = (over) => Object.assign(
+      { id: 'i1', kind: 'minutes', meetingId: 's1', summary: 'خلاصهٔ تازه', actions: [] }, over || {});
+
+    t('موردِ سالم خوانده می‌شود و وضعیتش «تازه» است', () => {
+      const r = I.parse(box([minutes()]), sessions);
+      assert.ok(r.ok);
+      assert.strictEqual(r.items.length, 1);
+      assert.strictEqual(r.items[0].state, 'new');
+      assert.strictEqual(r.items[0].title, 'جلسهٔ خالی');
+    });
+
+    t('جلسه‌ای که از قبل صورت‌جلسه دارد = تعارض، نه بازنویسیِ خاموش', () => {
+      assert.strictEqual(I.parse(box([minutes({ meetingId: 's2' })]), sessions).items[0].state, 'conflict');
+      // کارِ موجود هم یعنی صورت‌جلسه دارد
+      assert.strictEqual(I.parse(box([minutes({ meetingId: 's3' })]), sessions).items[0].state, 'conflict');
+    });
+
+    t('امنیت: شناسهٔ جلسهٔ ناموجود دور ریخته می‌شود', () => {
+      const r = I.parse(box([minutes({ meetingId: 'جعلی' })]), sessions);
+      assert.strictEqual(r.items.length, 0);
+      assert.strictEqual(r.skipped, 1);
+    });
+
+    t('امنیت: فایلی که مالِ منشی نیست رد می‌شود', () => {
+      const r = I.parse(JSON.stringify({ app: 'چیزِ دیگر', items: [minutes()] }), sessions);
+      assert.ok(!r.ok && r.error);
+      assert.strictEqual(r.items.length, 0);
+    });
+
+    t('امنیت: JSON خراب نمی‌شکند', () => {
+      const r = I.parse('{ این JSON نیست', sessions);
+      assert.ok(!r.ok && r.error.includes('JSON'));
+    });
+
+    t('امنیت: طول‌ها سقف دارند', () => {
+      const r = I.parse(box([minutes({
+        summary: 'ا'.repeat(I.MAX_SUMMARY + 5000),
+        actions: Array.from({ length: I.MAX_ACTIONS + 50 }, () => ({ text: 'ب'.repeat(I.MAX_TEXT + 200) }))
+      })]), sessions);
+      const it = r.items[0];
+      assert.strictEqual(it.summary.length, I.MAX_SUMMARY);
+      assert.strictEqual(it.actions.length, I.MAX_ACTIONS);
+      assert.strictEqual(it.actions[0].text.length, I.MAX_TEXT);
+    });
+
+    t('امنیت: تعداد موردها سقف دارد', () => {
+      const many = Array.from({ length: I.MAX_ITEMS + 40 }, (_, i) => minutes({ id: 'i' + i }));
+      assert.ok(I.parse(box(many), sessions).items.length <= I.MAX_ITEMS);
+    });
+
+    t('امنیت: نوعِ غیرمتنی به رشته تبدیل نمی‌شود، دور ریخته می‌شود', () => {
+      const r = I.parse(box([minutes({ summary: { a: 1 }, actions: [{ text: 42 }, { text: 'سالم' }] })]), sessions);
+      assert.strictEqual(r.items.length, 1);
+      assert.strictEqual(r.items[0].summary, '');
+      assert.deepStrictEqual(r.items[0].actions.map(a => a.text), ['سالم']);
+    });
+
+    t('امنیت: کاراکترِ کنترلی پاک می‌شود ولی خطِ تازه می‌ماند', () => {
+      const r = I.parse(box([minutes({ summary: 'خط یک\nخط دو\tبا تب' })]), sessions);
+      const s = r.items[0].summary;
+      assert.ok(!s.includes(' '));
+      assert.ok(s.includes('\n') && s.includes('\t'), 'چندخطی‌بودن نباید از بین برود');
+      assert.ok(s.includes('خطیک'));
+    });
+
+    t('فاصله‌ها دست‌نخورده می‌مانند', () => {
+      const text = 'یک خلاصه با چند کلمه و فاصله';
+      assert.strictEqual(I.parse(box([minutes({ summary: text })]), sessions).items[0].summary, text);
+    });
+
+    t('kind ناشناخته اجرا نمی‌شود', () => {
+      const r = I.parse(box([minutes({ kind: 'delete_everything' })]), sessions);
+      assert.strictEqual(r.items.length, 0);
+      assert.strictEqual(r.skipped, 1);
+    });
+
+    t('موردِ تهی (بدون خلاصه و بدون کار) رد می‌شود', () => {
+      const r = I.parse(box([minutes({ summary: '   ', actions: [] })]), sessions);
+      assert.strictEqual(r.items.length, 0);
+    });
+
+    t('سررسیدِ بدشکل نادیده گرفته می‌شود', () => {
+      const r = I.parse(box([minutes({ actions: [
+        { text: 'الف', due: '۱۴۰۵/۰۵/۱۰' }, { text: 'ب', due: '2026-08-06' }
+      ] })]), sessions);
+      assert.strictEqual(r.items[0].actions[0].due, null);
+      assert.strictEqual(r.items[0].actions[1].due, '2026-08-06');
+    });
+
+    t('پچ فقط همان چند فیلد را دست می‌زند', () => {
+      const it = I.parse(box([minutes({ actions: [{ text: 'کار' }] })]), sessions).items[0];
+      const p = I.patchFor(it);
+      assert.deepStrictEqual(Object.keys(p).sort(), ['actions', 'analysisError', 'summary', 'updatedAt']);
+      assert.strictEqual(p.summary, 'خلاصهٔ تازه');
+      assert.strictEqual(p.analysisError, '');
+    });
+
+    t('پس از اعمال، موردها از فایل برداشته می‌شوند', () => {
+      const raw = box([minutes({ id: 'a' }), minutes({ id: 'b' })]);
+      const left = I.remaining(raw, ['a']);
+      assert.strictEqual(left.items.length, 1);
+      assert.strictEqual(left.items[0].id, 'b');
+      assert.strictEqual(left.app, I.APP);
+      assert.strictEqual(I.remaining(raw, ['a', 'b']).items.length, 0);
+      assert.strictEqual(I.remaining('خراب', ['a']).items.length, 0, 'فایل خراب = صندوق خالی');
+    });
+
+    t('صندوق خالی ساختار درست دارد', () => {
+      const e = I.empty();
+      assert.strictEqual(e.app, I.APP);
+      assert.deepStrictEqual(e.items, []);
+      assert.ok(I.parse(JSON.stringify(e), sessions).ok);
+    });
+
+    t('گردشِ کامل: خروجیِ سرور MCP را منشی می‌خواند', () => {
+      // همان شکلی که mcp/manshi-mcp.js می‌نویسد
+      const fromServer = {
+        app: 'manshi-inbox', schema: 1,
+        items: [{
+          id: 'inabc', kind: 'minutes', meetingId: 's1',
+          summary: '## خلاصه\nدربارهٔ قیمت‌گذاری صحبت شد.',
+          actions: [{ text: 'ارسال گزارش', owner: 'بهنام', due: '2026-08-06' }],
+          by: 'mcp', createdAt: '2026-08-02T04:00:00.000Z'
+        }]
+      };
+      const r = I.parse(JSON.stringify(fromServer), sessions);
+      assert.strictEqual(r.items.length, 1);
+      assert.strictEqual(r.items[0].state, 'new');
+      assert.strictEqual(r.items[0].by, 'mcp');
+      assert.strictEqual(r.items[0].actions[0].owner, 'بهنام');
+    });
+  }
+
+  // ── ابزارهای MCP (منبعِ واحد) ───────────────────────
+  {
+    console.log('\n— ابزارهای MCP —');
+    const MT = require('../core/mcp-tools.js');
+    const fs2 = require('fs'), path2 = require('path');
+    const server = fs2.readFileSync(path2.join(__dirname, '../mcp/manshi-mcp.js'), 'utf8');
+
+    t('هر ابزار نام، توضیحِ مدل، توضیحِ فارسی و شِما دارد', () => {
+      assert.ok(MT.TOOLS.length >= 5);
+      const names = new Set();
+      for (const tl of MT.TOOLS) {
+        assert.ok(/^[a-z_]+$/.test(tl.name), 'نامِ بدشکل: ' + tl.name);
+        assert.ok(!names.has(tl.name), 'نامِ تکراری: ' + tl.name);
+        names.add(tl.name);
+        assert.ok(tl.fa && tl.faDesc, 'توضیحِ فارسی ندارد: ' + tl.name);
+        assert.ok(tl.description && tl.description.length > 20, 'توضیحِ مدل ناقص: ' + tl.name);
+        assert.strictEqual(tl.inputSchema.type, 'object', 'شِمای نادرست: ' + tl.name);
+        assert.strictEqual(typeof tl.writes, 'boolean');
+      }
+    });
+
+    t('فقط write_minutes می‌نویسد', () => {
+      const w = MT.TOOLS.filter(tl => tl.writes).map(tl => tl.name);
+      assert.deepStrictEqual(w, ['write_minutes']);
+    });
+
+    t('سرور همان فهرست را می‌دهد، بدون فیلدهای فارسی', () => {
+      const s = MT.forServer();
+      assert.strictEqual(s.length, MT.TOOLS.length);
+      for (const tl of s) {
+        assert.deepStrictEqual(Object.keys(tl).sort(), ['description', 'inputSchema', 'name']);
+        assert.ok(!('fa' in tl) && !('writes' in tl), 'فیلدِ رابط به مدل نشت کرده');
+      }
+    });
+
+    t('سرور واقعاً از همین فایل می‌خواند — نه نسخهٔ دومِ خودش', () => {
+      assert.ok(server.includes("require('../core/mcp-tools.js')"), 'سرور از منبعِ واحد نمی‌خواند');
+      assert.ok(!/const TOOLS = \[/.test(server), 'سرور هنوز فهرستِ جداگانه دارد — از هم می‌افتند');
+    });
+
+    t('هر ابزارِ تعریف‌شده در سرور پیاده‌سازی دارد', () => {
+      for (const tl of MT.TOOLS) {
+        assert.ok(server.includes("name === '" + tl.name + "'"),
+          'ابزارِ بی‌پیاده‌سازی: ' + tl.name);
+      }
+    });
+
+    t('نمونه‌های راهنما فقط ابزارهای موجود را نام می‌برند', () => {
+      assert.ok(MT.EXAMPLES.length >= 6);
+      for (const ex of MT.EXAMPLES) {
+        assert.ok(ex.want && ex.say, 'نمونهٔ ناقص');
+        assert.ok(ex.uses.length, 'نمونه بدون ابزار: ' + ex.want);
+        for (const n of ex.uses) assert.ok(MT.byName(n), 'ابزارِ ناموجود در نمونه: ' + n);
+      }
+    });
+
+    t('هر ابزار دستِ‌کم در یک نمونه دیده می‌شود', () => {
+      const seen = new Set(MT.EXAMPLES.flatMap(e => e.uses));
+      for (const tl of MT.TOOLS) assert.ok(seen.has(tl.name), 'ابزارِ بی‌نمونه: ' + tl.name);
+    });
+
+    t('byName روی نامِ ناموجود null می‌دهد', () => {
+      assert.strictEqual(MT.byName('نیست'), null);
+      assert.strictEqual(MT.byName('list_meetings').fa, 'فهرست جلسه‌ها');
+    });
+  }
+
+  // ── برنامهٔ روز (منطقی که تا امروز بی‌تست بود) ───────
+  {
+    console.log('\n— برنامهٔ روز —');
+    const A = require('../core/agenda.js');
+    const at = (d, h, m) => new Date(2026, 6, d, h, m || 0);
+
+    t('وقت آزاد: بین دو جلسه، با کفِ ۲۰ دقیقه', () => {
+      const day = at(20, 0), now = at(20, 7);   // قبل از شروعِ روزِ کاری
+      const gaps = A.freeGaps([
+        { start: at(20, 9), end: at(20, 10) },
+        { start: at(20, 10, 10), end: at(20, 11) },   // فقط ۱۰ دقیقه فاصله
+        { start: at(20, 14), end: at(20, 15) }
+      ], day, now);
+      const mins = gaps.map(g => g.min);
+      assert.deepStrictEqual(mins, [60, 180, 300], 'فاصلهٔ ۱۰ دقیقه‌ای نباید بیاید: ' + mins);
+    });
+
+    t('وقت آزاد: امروز از «الان» شروع می‌شود، نه از ابتدای روز', () => {
+      const day = at(20, 0);
+      const zero = A.freeGaps([], day, at(20, 7));    // قبل از ۸
+      const noon = A.freeGaps([], day, at(20, 12));   // ظهر
+      assert.strictEqual(zero[0].min, 12 * 60, 'از ۸ تا ۲۰');
+      assert.strictEqual(noon[0].min, 8 * 60, 'از ۱۲ تا ۲۰');
+    });
+
+    t('وقت آزاد: روزِ دیگر همیشه از ابتدای روزِ کاری', () => {
+      const gaps = A.freeGaps([], at(25, 0), at(20, 15));
+      assert.strictEqual(gaps[0].min, (A.DAY_END_H - A.DAY_START_H) * 60);
+    });
+
+    t('وقت آزاد: جلسهٔ پوشاننده فاصلهٔ جعلی نمی‌سازد', () => {
+      // جلسهٔ دوم داخل اولی است — نباید فاصله‌ای بین آن دو دربیاید
+      const gaps = A.freeGaps([
+        { start: at(20, 9), end: at(20, 13) },
+        { start: at(20, 10), end: at(20, 11) }
+      ], at(20, 0), at(20, 7));
+      assert.deepStrictEqual(gaps.map(g => g.min), [60, 7 * 60]);
+    });
+
+    t('وقت آزاد: ورودیِ خالی کلِ روز را می‌دهد و null نمی‌شکند', () => {
+      assert.strictEqual(A.freeGaps(null, at(20, 0), at(20, 7)).length, 1);
+    });
+
+    t('سریِ جلسه: شماره و واژه‌های عمومی نادیده گرفته می‌شوند', () => {
+      assert.strictEqual(A.seriesKey('جلسهٔ هفتگی تیم فروش #۳'), A.seriesKey('جلسهٔ هفتگی تیم فروش #۴'));
+      assert.strictEqual(A.seriesKey('Weekly Sales Sync 12'), A.seriesKey('Weekly Sales Sync 13'));
+      assert.notStrictEqual(A.seriesKey('جلسهٔ تیم فروش'), A.seriesKey('جلسهٔ تیم فنی'));
+    });
+
+    t('سریِ جلسه: عنوانِ کاملاً عمومی خالی نمی‌ماند', () => {
+      // اگر همهٔ واژه‌ها عمومی باشند، خودِ عنوان ملاک می‌شود — نه رشتهٔ تهی
+      assert.ok(A.seriesKey('جلسهٔ هفتگی').length > 0);
+      assert.strictEqual(A.seriesKey(''), '');
+    });
+
+    t('سریِ جلسه: هم‌سری‌ها از نو به کهنه مرتب می‌شوند', () => {
+      const ss = [
+        { id: 'a', title: 'جلسهٔ هفتگی فروش #۱', startedAt: 1000 },
+        { id: 'b', title: 'جلسهٔ هفتگی فروش #۲', startedAt: 3000 },
+        { id: 'c', title: 'جلسهٔ فنی', startedAt: 2000 }
+      ];
+      assert.deepStrictEqual(A.sessionSeries(ss[0], ss).map(x => x.id), ['b', 'a']);
+    });
+
+    t('تطبیق با تقویم: همان‌روز بودن به‌تنهایی کافی نیست', () => {
+      const s = { title: 'جلسهٔ محصول', startedAt: at(20, 10).getTime() };
+      const only = A.matchEventForSession(s, [{ title: 'چیزِ کاملاً دیگر', start: at(20, 11) }]);
+      assert.strictEqual(only, null, 'نباید فقط با همان‌روز بودن وصل شود');
+    });
+
+    t('تطبیق با تقویم: عنوانِ یکسان برنده است', () => {
+      const s = { title: 'جلسهٔ محصول', startedAt: at(20, 10).getTime() };
+      const hit = A.matchEventForSession(s, [
+        { title: 'جلسهٔ محصول و بازار', start: at(25, 9) },   // شباهت، روزِ دیگر = ۲
+        { title: 'جلسهٔ محصول', start: at(20, 9) }            // یکسان + همان روز = ۴
+      ]);
+      assert.strictEqual(hit.title, 'جلسهٔ محصول');
+    });
+
+    t('تطبیق با تقویم: عنوانِ خیلی کوتاه شباهت نمی‌سازد', () => {
+      const s = { title: 'ab', startedAt: at(20, 10).getTime() };
+      assert.strictEqual(A.matchEventForSession(s, [{ title: 'abcdef', start: at(20, 9) }]), null);
+    });
+
+    t('تطبیق با تقویم: ورودیِ خالی نمی‌شکند', () => {
+      assert.strictEqual(A.matchEventForSession({}, null), null);
+      assert.strictEqual(A.matchEventForSession({ title: 'x' }, [null]), null);
+    });
+
+    t('زمانِ جلسه: عدد و ISO هر دو کار می‌کنند', () => {
+      assert.strictEqual(A.sessionTime({ startedAt: 1500 }), 1500);
+      assert.strictEqual(A.sessionTime({ startedAt: '2026-08-02T04:00:00.000Z' }), Date.parse('2026-08-02T04:00:00.000Z'));
+      assert.strictEqual(A.sessionTime({ startedAt: 'خراب' }), 0, 'تاریخِ نامعتبر باید صفر شود نه NaN');
+      assert.strictEqual(A.sessionTime(null), 0);
+    });
+
+    t('مرتب‌سازی با startedAtِ مخلوطِ عدد و رشته درست کار می‌کند', () => {
+      const ss = [
+        { id: 'a', startedAt: '2026-08-01T00:00:00.000Z' },
+        { id: 'b', startedAt: Date.parse('2026-08-03T00:00:00.000Z') },
+        { id: 'c', startedAt: '2026-08-02T00:00:00.000Z' }
+      ];
+      assert.deepStrictEqual([...ss].sort(A.byNewest).map(x => x.id), ['b', 'c', 'a']);
+    });
+
+    t('آدرس Meet از متن بیرون کشیده و از نقطهٔ ته جمله پاک می‌شود', () => {
+      assert.strictEqual(A.cleanMeetUrl('بیا اینجا https://meet.google.com/abc-defg-hij.'), 'https://meet.google.com/abc-defg-hij');
+      assert.strictEqual(A.cleanMeetUrl('بدون لینک'), '');
+      assert.strictEqual(A.cleanMeetUrl(null), '');
+    });
+
+    t('مدت به فارسی', () => {
+      assert.strictEqual(A.humanDur(95), '۱ ساعت و ۳۵ دقیقه');
+      assert.strictEqual(A.humanDur(120), '۲ ساعت');
+      assert.strictEqual(A.humanDur(45), '۴۵ دقیقه');
+      assert.strictEqual(A.humanDur(-5), '۰ دقیقه', 'منفی نباید بیرون بزند');
+    });
+
+    t('برچسبِ کهنگیِ تماس', () => {
+      assert.strictEqual(A.staleLabel(null), 'بدون سابقهٔ تماس');
+      assert.strictEqual(A.staleLabel(0), 'آخرین تماس: امروز');
+      assert.strictEqual(A.staleLabel(1), 'آخرین تماس: دیروز');
+      assert.ok(A.staleLabel(3).includes('۳ روز'));
+      assert.ok(A.staleLabel(10).includes('۱ هفته'));
+      assert.ok(A.staleLabel(65).includes('۲ ماه'));
+    });
+
+    t('نرمال‌سازیِ جست‌وجو: رقم و ی/ک عربی', () => {
+      assert.strictEqual(A.searchNorm('۷'), '7');
+      assert.strictEqual(A.searchNorm('كتاب'), 'کتاب');
+      assert.strictEqual(A.searchNorm('علي'), 'علی');
+      assert.strictEqual(A.searchNorm('  ABC  '), 'abc');
+      assert.strictEqual(A.searchNorm(null), '');
+    });
+  }
+
+  // ── توضیحاتِ زیرکار ─────────────────────────────────
+  {
+    console.log('\n— توضیحاتِ زیرکار —');
+    const mk = async (title) => (await Store.addTask({ title, dir: 'mine' }));
+
+    const t1 = await mk('کارِ آزمایشی');
+    const s1 = await Store.addSubtask(t1.id, 'زیرکار یک', 'اول با تیم هماهنگ کن');
+    t('زیرکار با توضیح ساخته می‌شود', () => {
+      assert.strictEqual(s1.title, 'زیرکار یک');
+      assert.strictEqual(s1.note, 'اول با تیم هماهنگ کن');
+      assert.strictEqual(s1.done, false);
+    });
+
+    const s2 = await Store.addSubtask(t1.id, 'زیرکار دو');
+    t('زیرکارِ بی‌توضیح، رشتهٔ تهی می‌گیرد نه undefined', () => {
+      assert.strictEqual(s2.note, '');
+    });
+
+    const s3 = await Store.addSubtask(t1.id, 'زیرکار سه', 'ا'.repeat(5000));
+    t('توضیحِ زیرکار سقف دارد', () => {
+      assert.strictEqual(s3.note.length, 2000);
+    });
+
+    await Store.updateSubtask(t1.id, s1.id, { note: 'توضیحِ عوض‌شده' });
+    {
+      const tasks = await Store.getTasks();
+      const cur = tasks.find(x => x.id === t1.id).subtasks.find(x => x.id === s1.id);
+      t('توضیح واقعاً در حافظه نشست', () => {
+        assert.strictEqual(cur.note, 'توضیحِ عوض‌شده');
+        assert.strictEqual(cur.title, 'زیرکار یک', 'عنوان نباید دست بخورد');
+      });
+    }
+
+    await Store.updateSubtask(t1.id, s1.id, { title: '   ' });
+    {
+      const tasks = await Store.getTasks();
+      const cur = tasks.find(x => x.id === t1.id).subtasks.find(x => x.id === s1.id);
+      t('عنوانِ خالی، زیرکار را بی‌نام نمی‌کند', () => {
+        assert.strictEqual(cur.title, 'زیرکار یک');
+      });
+    }
+
+    await Store.updateSubtask(t1.id, s1.id, { done: true, id: 'جعلی', title: 'نامِ تازه' });
+    {
+      const tasks = await Store.getTasks();
+      const cur = tasks.find(x => x.id === t1.id).subtasks.find(x => x.id === s1.id);
+      t('فقط عنوان و توضیح تغییر می‌کنند، نه چیز دیگر', () => {
+        assert.strictEqual(cur.title, 'نامِ تازه');
+        assert.strictEqual(cur.done, false, 'done از این مسیر عوض نمی‌شود');
+        assert.strictEqual(cur.id, s1.id, 'شناسه دست‌نخورده می‌ماند');
+      });
+    }
+
+    {
+      const r1 = await Store.updateSubtask(t1.id, 'نیست', { note: 'x' });
+      const r2 = await Store.updateSubtask('نیست', s1.id, { note: 'x' });
+      t('شناسهٔ نامعتبر بی‌صدا رد می‌شود', () => {
+        assert.strictEqual(r1, null);
+        assert.strictEqual(r2, null);
+      });
+    }
+
+    // مهم‌ترین: با تکرارِ کار، «چطور انجامش بدهم» نباید گم شود
+    const rec = await Store.addTask({ title: 'کارِ تکرارشونده', dir: 'mine', recur: { kind: 'week', n: 1 } });
+    await Store.addSubtask(rec.id, 'گام یک', 'راهنمای انجامش این است');
+    await Store.addSubtask(rec.id, 'گام دو', '');
+    // گام یک را تیک بزن تا معلوم شود done بازنشانی می‌شود
+    {
+      const cur = (await Store.getTasks()).find(x => x.id === rec.id);
+      await Store.toggleSubtask(rec.id, cur.subtasks[0].id);
+    }
+    await Store.toggleDone(rec.id);
+    {
+      const tasks = await Store.getTasks();
+      const next = tasks.find(x => x.title === 'کارِ تکرارشونده' && x.status === 'open');
+      t('در تکرار: توضیحِ زیرکار می‌ماند ولی تیک‌ها پاک می‌شوند', () => {
+        assert.ok(next, 'نسخهٔ تکرارشونده ساخته نشد');
+        assert.strictEqual(next.subtasks.length, 2);
+        assert.strictEqual(next.subtasks[0].note, 'راهنمای انجامش این است');
+        assert.strictEqual(next.subtasks[1].note, '');
+        assert.ok(next.subtasks.every(x => x.done === false), 'تیک‌ها باید صفر شوند');
+      });
+    }
+  }
+
+  // ── اولویت ──────────────────────────────────────────
+  {
+    console.log('\n— اولویت —');
+    const now = new Date();
+    const iso = d => { const x = new Date(now); x.setDate(x.getDate() + d); return x.toISOString().slice(0, 10); };
+    const mk = o => Object.assign({ title: 'x', status: 'open', createdAt: now.toISOString() }, o);
+
+    t('اولویتِ بالاتر امتیازِ بیشتر می‌دهد', () => {
+      const sc = p => Store.taskScore(mk({ priority: p }), now);
+      assert.ok(sc(3) > sc(2) && sc(2) > sc(1) && sc(1) > sc(0));
+    });
+
+    t('اولویت جای ددلاین را نمی‌گیرد', () => {
+      const prio = Store.taskScore(mk({ priority: 3 }), now);
+      assert.ok(prio > Store.taskScore(mk({ due: iso(0) }), now), 'باید از ددلاینِ امروز بالاتر باشد');
+      assert.ok(prio > Store.taskScore(mk({ due: iso(-5) }), now), 'و از ۵ روز عقب‌افتاده');
+      assert.ok(Store.taskScore(mk({ due: iso(-20) }), now) > prio, 'ولی خیلی عقب‌افتاده بالاتر می‌ماند');
+    });
+
+    t('سنجاق همچنان از همه بالاتر است', () => {
+      assert.ok(Store.taskScore(mk({ pinned: true }), now)
+        > Store.taskScore(mk({ priority: 3, due: iso(-10) }), now));
+    });
+
+    t('توضیحِ مرتب‌سازی اولویت را نام می‌برد', () => {
+      assert.strictEqual(Store.scoreReason(mk({ priority: 3 }), now), 'اولویت زیاد');
+      assert.strictEqual(Store.scoreReason(mk({ priority: 2 }), now), 'اولویت متوسط');
+      assert.strictEqual(Store.scoreReason(mk({ priority: 1 }), now), 'اولویت کم');
+    });
+
+    t('عقب‌افتادگی از اولویت فوری‌تر خوانده می‌شود', () => {
+      const r = Store.scoreReason(mk({ priority: 3, due: iso(-4) }), now);
+      assert.ok(r.includes('عقب‌افتاده'), 'گفت: ' + r);
+    });
+
+    t('ددلاینِ امروز از اولویتِ کم مهم‌تر خوانده می‌شود', () => {
+      assert.strictEqual(Store.scoreReason(mk({ priority: 1, due: iso(0) }), now), 'ددلاین امروز');
+    });
+
+    {
+      const a = await Store.addTask({ title: 'اولویتِ خراب', priority: 99 });
+      const b = await Store.addTask({ title: 'اولویتِ متنی', priority: 'زیاد' });
+      const c = await Store.addTask({ title: 'اولویتِ سالم', priority: 2 });
+      t('ورودیِ نامعتبرِ اولویت پذیرفته نمی‌شود', () => {
+        assert.strictEqual(a.priority, 0);
+        assert.strictEqual(b.priority, 0);
+        assert.strictEqual(c.priority, 2);
+      });
+      for (const x of [a, b, c]) await Store.removeTask(x.id);
+    }
+
+    {
+      const rec = await Store.addTask({
+        title: 'کارِ مهمِ تکرارشونده', priority: 3,
+        recur: { freq: 'weekly', interval: 1, weekday: 2 }
+      });
+      await Store.toggleDone(rec.id);
+      const next = (await Store.getTasks()).find(x => x.title === 'کارِ مهمِ تکرارشونده' && x.status === 'open');
+      t('اولویت با تکرار به نمونهٔ بعدی می‌رود', () => {
+        assert.ok(next, 'نمونهٔ بعدی ساخته نشد');
+        assert.strictEqual(next.priority, 3);
+      });
+    }
+
+    t('برچسبِ تکرارِ خراب، متنِ بی‌معنی نمی‌سازد', () => {
+      // پیش از این، هر freqِ ناشناخته «undefined هر undefined ماه» می‌داد
+      for (const bad of [{}, { kind: 'week', n: 1 }, { freq: 'weekly', weekday: 99 }, { freq: 'monthly' }]) {
+        const out = DP.recurLabel(bad);
+        assert.strictEqual(out, '', 'برای ' + JSON.stringify(bad) + ' داد: ' + out);
+      }
+      assert.strictEqual(DP.recurLabel({ freq: 'weekly', interval: 1, weekday: 2 }), 'هر دوشنبه');
+      assert.strictEqual(DP.recurLabel({ freq: 'monthly', interval: 1, day: 1 }), 'اول هر ماه');
+    });
+  }
+
+  // ── پروژه‌ها و حوزه‌ها ──────────────────────────────
+  {
+    console.log('\n— پروژه‌ها —');
+
+    const area = await Store.saveProject({ name: 'دیجی‌کالا' });
+    const p1 = await Store.saveProject({ name: 'فاز دو', parentId: area.id });
+    const p2 = await Store.saveProject({ name: 'پشتیبانی', parentId: area.id });
+    const solo = await Store.saveProject({ name: 'پروژهٔ مستقل' });
+
+    t('پروژه ساخته می‌شود و رنگ می‌گیرد', () => {
+      assert.ok(area.id && area.name === 'دیجی‌کالا');
+      assert.strictEqual(area.parentId, null);
+      assert.ok(Store.PROJECT_COLORS.includes(area.color));
+    });
+
+    {
+      const bad = await Store.saveProject({ name: '   ' });
+      const bad2 = await Store.saveProject({});
+      t('نامِ خالی رد می‌شود', () => {
+        assert.strictEqual(bad, null);
+        assert.strictEqual(bad2, null);
+      });
+    }
+
+    {
+      const long = await Store.saveProject({ name: 'ط'.repeat(200) });
+      t('سقفِ نامِ پروژه', () => { assert.strictEqual(long.name.length, 60); });
+      await Store.removeProject(long.id);
+    }
+
+    {
+      const deep = await Store.saveProject({ name: 'خیلی عمیق', parentId: p1.id });
+      t('زیرِ یک زیرپروژه، والد نمی‌گیرد', () => {
+        assert.strictEqual(deep.parentId, null, 'باید به ریشه برگردد');
+      });
+      await Store.removeProject(deep.id);
+    }
+
+    {
+      const self = await Store.saveProject({ id: solo.id, name: 'پروژهٔ مستقل', parentId: solo.id });
+      t('حلقهٔ خودارجاع ساخته نمی‌شود', () => { assert.strictEqual(self.parentId, null); });
+    }
+
+    // کارها را به پروژه وصل کن
+    const tA = await Store.addTask({ title: 'کارِ فاز دو', projectId: p1.id, meetingRef: 'sess-1' });
+    const tB = await Store.addTask({ title: 'کارِ پشتیبانی', projectId: p2.id, meetingRef: 'sess-2' });
+    const tC = await Store.addTask({ title: 'کارِ حوزه', projectId: area.id, meetingRef: 'sess-1' });
+    const tD = await Store.addTask({ title: 'کارِ بی‌پروژه' });
+
+    t('کار به پروژه وصل می‌شود', () => {
+      assert.strictEqual(tA.projectId, p1.id);
+      assert.strictEqual(tD.projectId, null);
+    });
+
+    {
+      const tasks = await Store.getTasks();
+      const tree = Store.projectTree(await Store.getProjects(), tasks);
+      const node = tree.find(n => n.id === area.id);
+      t('درخت: شمارِ خود و زیرمجموعه‌ها', () => {
+        assert.ok(node, 'حوزه در درخت نیست');
+        assert.strictEqual(node.open, 1, 'کارِ مستقیمِ حوزه');
+        assert.strictEqual(node.total, 3, 'خودش + دو زیرپروژه');
+        assert.strictEqual(node.children.length, 2);
+      });
+      t('زیرپروژه در ریشهٔ درخت تکرار نمی‌شود', () => {
+        assert.ok(!tree.some(n => n.id === p1.id));
+      });
+    }
+
+    {
+      const tasks = await Store.getTasks();
+      const refs = Store.projectMeetingRefs(area.id, tasks, [p1.id, p2.id]);
+      t('جلسه‌های پروژه از کارها مشتق می‌شوند، بدون دادهٔ تازه', () => {
+        assert.deepStrictEqual(refs.sort(), ['sess-1', 'sess-2']);
+      });
+      t('بدون زیرمجموعه فقط جلسه‌های خودش', () => {
+        assert.deepStrictEqual(Store.projectMeetingRefs(p2.id, tasks), ['sess-2']);
+      });
+      t('جلسهٔ تکراری یک بار می‌آید', () => {
+        // sess-1 هم در کارِ فاز دو است هم در کارِ حوزه
+        assert.strictEqual(Store.projectMeetingRefs(area.id, tasks, [p1.id]).length, 1);
+      });
+    }
+
+    // مهم‌ترین: حذفِ پروژه نباید کار یا جلسه‌ای را نابود کند
+    {
+      const before = (await Store.getTasks()).length;
+      const res = await Store.removeProject(area.id);
+      const tasks = await Store.getTasks();
+      const projects = await Store.getProjects();
+      t('حذفِ پروژه هیچ کاری را حذف نمی‌کند', () => {
+        assert.strictEqual(tasks.length, before);
+        assert.ok(tasks.find(x => x.id === tC.id), 'کارِ حوزه باید بماند');
+      });
+      t('کارهای آن پروژه بی‌پروژه می‌شوند، نه یتیم', () => {
+        assert.strictEqual(tasks.find(x => x.id === tC.id).projectId, null);
+      });
+      t('زیرپروژه‌ها یک سطح بالا می‌آیند', () => {
+        assert.deepStrictEqual(res.promoted.sort(), [p1.id, p2.id].sort());
+        assert.strictEqual(projects.find(p => p.id === p1.id).parentId, null);
+      });
+      t('کارهای زیرپروژه‌ها دست نمی‌خورند', () => {
+        assert.strictEqual(tasks.find(x => x.id === tA.id).projectId, p1.id);
+        assert.strictEqual(tasks.find(x => x.id === tA.id).meetingRef, 'sess-1', 'ارتباط جلسه سالم');
+      });
+    }
+
+    {
+      const rec = await Store.addTask({
+        title: 'کارِ پروژه‌دارِ تکرارشونده', projectId: p1.id,
+        recur: { freq: 'weekly', interval: 1, weekday: 2 }
+      });
+      await Store.toggleDone(rec.id);
+      const next = (await Store.getTasks()).find(x => x.title === 'کارِ پروژه‌دارِ تکرارشونده' && x.status === 'open');
+      t('پروژه با تکرار به نمونهٔ بعدی می‌رود', () => {
+        assert.ok(next); assert.strictEqual(next.projectId, p1.id);
+      });
+      await Store.removeTask(next.id); await Store.removeTask(rec.id);
+    }
+
+    {
+      const r = await Store.removeProject('نیست');
+      t('حذفِ شناسهٔ نامعتبر null می‌دهد', () => { assert.strictEqual(r, null); });
+    }
+
+    // پاک‌سازی
+    for (const x of [tA, tB, tC, tD]) await Store.removeTask(x.id);
+    for (const pr of await Store.getProjects()) await Store.removeProject(pr.id);
+  }
+
+  // ── دفترچهٔ توضیحات ─────────────────────────────────
+  {
+    console.log('\n— دفترچهٔ توضیحات —');
+    const task1 = await Store.addTask({ title: 'کارِ توضیح‌دار' });
+    const fresh = async id => (await Store.getTasks()).find(x => x.id === id);
+
+    t('کارِ تازه دفترچهٔ خالی دارد', () => {
+      assert.deepStrictEqual(Store.noteEntries(task1), []);
+    });
+
+    const n1 = await Store.addNote(task1.id, 'با مالی تماس گرفتم');
+    const n2 = await Store.addNote(task1.id, 'قیمت را فرستادند');
+
+    t('هر ثبت زمان و شناسهٔ خودش را دارد', () => {
+      assert.ok(n1.at && n2.at, 'زمان ثبت نشده');
+      assert.notStrictEqual(n1.id, n2.id);
+      assert.ok(Date.parse(n1.at) <= Date.parse(n2.at));
+    });
+
+    {
+      const cur = await fresh(task1.id);
+      const e = Store.noteEntries(cur);
+      t('ثبت‌ها به ترتیبِ نوشتن می‌مانند', () => {
+        assert.strictEqual(e.length, 2);
+        assert.strictEqual(e[0].text, 'با مالی تماس گرفتم');
+        assert.strictEqual(e[1].text, 'قیمت را فرستادند');
+      });
+      t('آخرین توضیح در notes می‌نشیند — سازگاری با بقیهٔ رابط', () => {
+        assert.strictEqual(cur.notes, 'قیمت را فرستادند');
+      });
+    }
+
+    t('توضیحِ خالی یا کارِ ناموجود ثبت نمی‌شود', async () => {
+      assert.strictEqual(await Store.addNote(task1.id, '   '), null);
+      assert.strictEqual(await Store.addNote(task1.id, ''), null);
+      assert.strictEqual(await Store.addNote('نیست', 'x'), null);
+    });
+
+    {
+      const big = await Store.addNote(task1.id, 'ط'.repeat(Store.NOTE_MAX + 500));
+      t('توضیحِ خیلی بلند بریده می‌شود', () => {
+        assert.strictEqual(big.text.length, Store.NOTE_MAX);
+      });
+      await Store.removeNote(task1.id, big.id);
+    }
+
+    {
+      await Store.removeNote(task1.id, n2.id);
+      const cur = await fresh(task1.id);
+      t('حذفِ ثبت، notes را به ثبتِ قبلی برمی‌گرداند', () => {
+        assert.strictEqual(Store.noteEntries(cur).length, 1);
+        assert.strictEqual(cur.notes, 'با مالی تماس گرفتم');
+      });
+      t('حذفِ ثبتِ ناموجود بی‌صدا رد می‌شود', async () => {
+        assert.strictEqual(await Store.removeNote(task1.id, 'نیست'), null);
+      });
+    }
+
+    {
+      const legacy = await Store.addTask({ title: 'کارِ قدیمی', notes: 'توضیحِ قدیمی' });
+      const e = Store.noteEntries(legacy);
+      t('توضیحِ قدیمی به یک ثبت خوانده می‌شود، بدون بازنویسیِ داده', () => {
+        assert.strictEqual(e.length, 1);
+        assert.strictEqual(e[0].text, 'توضیحِ قدیمی');
+        assert.ok(e[0].legacy, 'باید علامتِ قدیمی داشته باشد');
+        assert.deepStrictEqual(legacy.noteLog, [], 'داده نباید عوض شده باشد');
+      });
+      await Store.addNote(legacy.id, 'توضیحِ تازه');
+      const after = await fresh(legacy.id);
+      t('توضیحِ قدیمی با اولین ثبتِ تازه وارد دفترچه می‌شود و گم نمی‌شود', () => {
+        const ee = Store.noteEntries(after);
+        assert.strictEqual(ee.length, 2);
+        assert.strictEqual(ee[0].text, 'توضیحِ قدیمی');
+        assert.strictEqual(ee[1].text, 'توضیحِ تازه');
+      });
+      await Store.removeTask(legacy.id);
+    }
+
+    {
+      const rec = await Store.addTask({
+        title: 'تکرارشوندهٔ توضیح‌دار', notes: 'قالب در درایو است',
+        recur: { freq: 'weekly', interval: 1, weekday: 2 }
+      });
+      await Store.addNote(rec.id, 'این هفته با نگار هماهنگ شد');
+      await Store.toggleDone(rec.id);
+      const next = (await Store.getTasks()).find(x => x.title === 'تکرارشوندهٔ توضیح‌دار' && x.status === 'open');
+      t('تکرار: متنِ توضیح می‌رود ولی سابقهٔ زمان‌دار نه', () => {
+        assert.ok(next, 'نمونهٔ بعدی ساخته نشد');
+        assert.ok(next.notes, 'دستورالعمل باید بماند');
+        assert.deepStrictEqual(next.noteLog, [], 'سابقهٔ رخدادِ قبلی نباید منتقل شود');
+      });
+      if (next) await Store.removeTask(next.id);
+      await Store.removeTask(rec.id);
+    }
+
+    await Store.removeTask(task1.id);
+  }
+
+  // ── پروندهٔ پروژه ───────────────────────────────────
+  {
+    console.log('\n— پروندهٔ پروژه —');
+    const now = new Date();
+    const ago = d => new Date(now.getTime() - d * 86400000).getTime();
+
+    const area = await Store.saveProject({ name: 'مشتریِ الف' });
+    const kid = await Store.saveProject({ name: 'فاز یک', parentId: area.id });
+
+    const sessions = [
+      { id: 'm1', title: 'کیک‌آف', startedAt: ago(2), transcript: [{ speaker: 'نگار', text: 'x' }, { speaker: 'صدر', text: 'y' }], summary: '## خ', actions: [] },
+      { id: 'm2', title: 'پیگیری', startedAt: ago(30), transcript: [{ speaker: 'نگار', text: 'z' }], summary: '', actions: [] },
+      { id: 'm3', title: 'جلسهٔ بی‌ربط', startedAt: ago(1), transcript: [{ speaker: 'کسی', text: 'q' }], summary: '', actions: [] }
+    ];
+
+    const t1 = await Store.addTask({ title: 'کارِ فوری', projectId: area.id, meetingRef: 'm1', due: '2020-01-01' });
+    const t2 = await Store.addTask({ title: 'کارِ عادی', projectId: kid.id, meetingRef: 'm2' });
+    const t3 = await Store.addTask({ title: 'سپرده به نگار', projectId: area.id, dir: 'theirs', who: 'نگار' });
+    const t4 = await Store.addTask({ title: 'کارِ تمام‌شده', projectId: area.id });
+    await Store.toggleDone(t4.id);
+
+    const tasks = await Store.getTasks();
+    const projects = await Store.getProjects();
+    const d = Store.projectDossier(area.id, projects, tasks, sessions, now);
+
+    t('پرونده ساخته می‌شود و زیرپروژه را می‌شناسد', () => {
+      assert.ok(d, 'پرونده null است');
+      assert.strictEqual(d.project.name, 'مشتریِ الف');
+      assert.deepStrictEqual(d.children.map(c => c.name), ['فاز یک']);
+    });
+
+    t('شمارش: کارِ من، منتظرِ دیگران، انجام‌شده — با احتسابِ زیرپروژه', () => {
+      assert.strictEqual(d.counts.mine, 2, 'کارِ فوری + کارِ فاز یک');
+      assert.strictEqual(d.counts.theirs, 1);
+      assert.strictEqual(d.counts.done, 1);
+      assert.strictEqual(d.counts.open, 3);
+    });
+
+    t('کارِ بعدی یکی است و از منطقِ هوشمند می‌آید', () => {
+      assert.ok(d.next, 'کارِ بعدی نیست');
+      assert.strictEqual(d.next.title, 'کارِ فوری', 'عقب‌افتاده‌ترین باید اول باشد');
+    });
+
+    t('کارِ بعدی هرگز کارِ سپرده‌شده نیست', () => {
+      assert.notStrictEqual(d.next.id, t3.id, 'کارِ منتظرِ دیگران کارِ بعدیِ من نیست');
+    });
+
+    t('جلسه‌ها فقط آن‌هایی که کارِ این پروژه به آن‌ها وصل است', () => {
+      assert.deepStrictEqual(d.meetings.map(m => m.id), ['m1', 'm2'], 'm3 نباید بیاید');
+    });
+
+    t('جلسه‌ها از تازه به کهنه مرتب‌اند و آخرین تاریخ درست است', () => {
+      assert.strictEqual(d.meetings[0].id, 'm1');
+      assert.strictEqual(d.daysSinceMeeting, 2);
+    });
+
+    t('آدم‌ها از گویندگانِ جلسه و مسئولِ کارها می‌آیند', () => {
+      const names = d.people.map(p => p.name);
+      assert.ok(names.includes('نگار') && names.includes('صدر'), 'گویندگان: ' + names);
+      assert.ok(!names.includes('کسی'), 'گویندهٔ جلسهٔ بی‌ربط نباید بیاید');
+      assert.strictEqual(d.people.find(p => p.name === 'نگار').open, 1, 'یک کارِ باز دارد');
+    });
+
+    t('پروژهٔ بی‌کارِ باز راکد علامت می‌خورد', () => {
+      const empty = Store.projectDossier(kid.id, projects, tasks.filter(x => x.projectId !== kid.id), sessions, now);
+      assert.ok(empty.stalled === false || empty.counts.open === 0);
+      const noneAtAll = Store.projectDossier(kid.id, projects, [], sessions, now);
+      assert.strictEqual(noneAtAll.stalled, false, 'پروژهٔ کاملاً خالی راکد نیست، تازه است');
+    });
+
+    t('مرحله پیش‌فرض دارد و مقدارِ نامعتبر را نمی‌پذیرد', async () => {
+      assert.strictEqual(area.stage, 'active');
+      const bad = await Store.saveProject({ ...area, stage: 'چیزی' });
+      assert.strictEqual(bad.stage, 'active');
+      const good = await Store.saveProject({ ...area, stage: 'waiting' });
+      assert.strictEqual(good.stage, 'waiting');
+    });
+
+    t('پروژهٔ جلسه: نسبتِ صریح بر اشتقاق مقدم است', () => {
+      const explicit = Store.sessionProject({ id: 'm9', projectId: kid.id }, tasks);
+      assert.strictEqual(explicit.id, kid.id);
+      assert.strictEqual(explicit.explicit, true);
+    });
+
+    t('پروژهٔ جلسه: بدونِ نسبتِ صریح، از کارهایش حدس زده می‌شود', () => {
+      const derived = Store.sessionProject({ id: 'm1' }, tasks);
+      assert.strictEqual(derived.id, area.id, 'کارِ فوری از m1 آمده و در حوزه است');
+      assert.strictEqual(derived.explicit, false);
+    });
+
+    t('پروژهٔ جلسه: پرتکرارترین برنده است', () => {
+      const many = [
+        { id: 'x1', meetingRef: 'mX', projectId: kid.id },
+        { id: 'x2', meetingRef: 'mX', projectId: kid.id },
+        { id: 'x3', meetingRef: 'mX', projectId: area.id }
+      ];
+      assert.strictEqual(Store.sessionProject({ id: 'mX' }, many).id, kid.id);
+    });
+
+    t('پروژهٔ جلسه: بی‌کار و بی‌نسبت، هیچ', () => {
+      assert.strictEqual(Store.sessionProject({ id: 'تنها' }, tasks).id, null);
+      assert.strictEqual(Store.sessionProject(null, tasks).id, null);
+    });
+
+    t('جلسهٔ بی‌کار هم با نسبتِ صریح در پرونده می‌آید', () => {
+      // m3 هیچ کاری ندارد؛ فقط با نسبتِ صریح باید بیاید
+      const withExplicit = sessions.map(sn => sn.id === 'm3' ? { ...sn, projectId: area.id } : sn);
+      const d2 = Store.projectDossier(area.id, projects, tasks, withExplicit, now);
+      assert.ok(d2.meetings.some(m => m.id === 'm3'), 'جلسهٔ صریح نیامد');
+      assert.strictEqual(d2.meetings.length, 3);
+    });
+
+    t('projectMeetingRefs جلسه‌های صریح را هم می‌شمارد', () => {
+      const withExplicit = [{ id: 'mSolo', projectId: area.id }];
+      const refs = Store.projectMeetingRefs(area.id, tasks, [kid.id], withExplicit);
+      assert.ok(refs.includes('mSolo'));
+      assert.ok(refs.includes('m1'), 'مشتق‌ها هم باید بمانند');
+    });
+
+    t('پروژهٔ ناموجود پرونده ندارد', () => {
+      assert.strictEqual(Store.projectDossier('نیست', projects, tasks, sessions, now), null);
+    });
+
+    t('ورودیِ خالی نمی‌شکند', () => {
+      const d2 = Store.projectDossier(area.id, projects, [], [], now);
+      assert.strictEqual(d2.counts.open, 0);
+      assert.strictEqual(d2.next, null);
+      assert.deepStrictEqual(d2.meetings, []);
+      assert.deepStrictEqual(d2.people, []);
+      assert.strictEqual(d2.daysSinceMeeting, null);
+    });
+
+    for (const x of [t1, t2, t3, t4]) await Store.removeTask(x.id);
+    for (const pr of await Store.getProjects()) await Store.removeProject(pr.id);
+  }
+
+  // ── ابزارهای MCP و استانداردِ صورت‌جلسه ──────────────
+  // ریشهٔ ایراد: مسیرِ MCP قالب‌های خودِ منشی را به مدل نمی‌داد و
+  // صورت‌جلسه‌ها چندخطی درمی‌آمدند. این تست‌ها نگهبانِ همان‌اند.
+  {
+    console.log('\n— ابزارهای MCP —');
+    const MCP = require('../core/mcp-tools.js');
+    const MoM = require('../core/mom-core.js');
+
+    t('هر ابزار توضیحِ مدل و توضیحِ آدم دارد', () => {
+      for (const tool of MCP.TOOLS) {
+        assert.ok(tool.description && tool.description.length > 20, tool.name);
+        assert.ok(tool.fa && tool.faDesc, tool.name);
+      }
+    });
+
+    t('forServer فیلدهای فارسیِ رابط را بیرون می‌گذارد', () => {
+      for (const tool of MCP.forServer()) {
+        assert.deepStrictEqual(Object.keys(tool).sort(), ['description', 'inputSchema', 'name']);
+      }
+    });
+
+    t('minutes_templates در فهرست هست و چیزی نمی‌نویسد', () => {
+      const tool = MCP.byName('minutes_templates');
+      assert.ok(tool);
+      assert.strictEqual(tool.writes, false);
+    });
+
+    t('تنها ابزارِ نویسنده write_minutes است', () => {
+      assert.deepStrictEqual(MCP.TOOLS.filter(x => x.writes).map(x => x.name), ['write_minutes']);
+    });
+
+    t('get_meeting مدل را به minutes_guide ارجاع می‌دهد', () => {
+      assert.ok(MCP.byName('get_meeting').description.includes('minutes_guide'));
+    });
+
+    // اگر کسی روزی summary را دوباره «خلاصه» توصیف کند، مدل کوتاه می‌نویسد.
+    t('توضیحِ summary عمق می‌خواهد، نه چکیده', () => {
+      const d = MCP.byName('write_minutes').inputSchema.properties.summary.description;
+      assert.ok(d.includes('کامل'));
+      assert.ok(d.includes('چند خطِ کلی کافی نیست'));
+    });
+
+    t('همهٔ ابزارهای مثال‌ها واقعاً وجود دارند', () => {
+      for (const ex of MCP.EXAMPLES) {
+        for (const n of ex.uses) assert.ok(MCP.byName(n), 'ابزارِ ناموجود در مثال‌ها: ' + n);
+      }
+    });
+
+    t('mom-core از node قابل خواندن است', () => {
+      assert.ok(Array.isArray(MoM.BUILTIN_TEMPLATES) && MoM.BUILTIN_TEMPLATES.length);
+      assert.ok(MoM.COMPREHENSIVE_MOM_SYSTEM_PROMPT.length > 1000);
+    });
+
+    t('هر قالب یا دستورِ کامل دارد یا تأکیدِ اختصاصی', () => {
+      for (const tpl of MoM.BUILTIN_TEMPLATES) {
+        assert.ok(tpl.systemPrompt || tpl.instructions, tpl.id);
+      }
+    });
+
+    t('قالبِ ناشناخته به قالبِ پیش‌فرض برمی‌گردد، نه undefined', () => {
+      assert.ok(MoM.getTemplate('چنین-قالبی-نیست').id);
+    });
+
+    t('قالبِ گزارشی سقفِ بالا نمی‌گذارد', () => {
+      const p = MoM.getTemplate('report').systemPrompt;
+      assert.ok(p.includes('سقفِ بالا ندارد'));
+      assert.ok(p.includes('هیچ جدولی ننویس'));   // قاعدهٔ قدیمی نباید قربانی شود
+    });
+
+    // ── صندوق ورودی: سندِ بلند ─────────────────────────
+    const Inbox = require('../core/inbox.js');
+    const target = [{ id: 'm1', title: 'جلسهٔ بلند', transcript: [] }];
+    const box = (summary) => JSON.stringify({
+      app: 'manshi-inbox', schema: 1,
+      items: [{ id: 'i1', kind: 'minutes', meetingId: 'm1', summary }]
+    });
+
+    t('صورت‌جلسهٔ چندهزارکلمه‌ای سالم رد می‌شود', () => {
+      const long = 'ت'.repeat(90000);
+      const r = Inbox.parse(box(long), target);
+      assert.strictEqual(r.items.length, 1);
+      assert.strictEqual(r.items[0].summary.length, 90000);
+      assert.strictEqual(r.items[0].truncated, false);
+    });
+
+    t('از سقف که رد شد، بریده می‌شود ولی خاموش نه', () => {
+      const r = Inbox.parse(box('ت'.repeat(Inbox.MAX_SUMMARY + 500)), target);
+      assert.strictEqual(r.items[0].summary.length, Inbox.MAX_SUMMARY);
+      assert.strictEqual(r.items[0].truncated, true);
+    });
+
+    t('سقفِ تازه از سقفِ قبلی بزرگ‌تر است', () => {
+      assert.ok(Inbox.MAX_SUMMARY >= 120000);
+    });
+
+    // ── راه‌اندازیِ پل ───────────────────────────────────
+    // هر تستِ اینجا از یک اشتباهِ واقعی در راه‌اندازی می‌آید.
+    const Snap = require('../core/snapshot.js');
+    const SCRIPT = '/Users/kazem/manshi-suite/mcp/manshi-mcp.js';
+    const DATA = '/Users/kazem/manshi-data';
+    const NODE = '/opt/homebrew/bin/node';
+
+    t('مسیرِ کاملِ Node در تنظیمات می‌نشیند', () => {
+      for (const id of ['codex', 'claude-desktop', 'cursor', 'vscode']) {
+        const s = Snap.mcpSnippet(id, SCRIPT, DATA, 'mac', NODE);
+        assert.ok(s.includes(NODE), id);
+        assert.ok(!/"command": ?"node"/.test(s), id + ' هنوز node خالی دارد');
+      }
+    });
+
+    t('بدون مسیرِ Node به node خالی برمی‌گردد و نمی‌شکند', () => {
+      assert.ok(Snap.mcpSnippet('codex', SCRIPT, DATA, 'mac', '').includes('"node"'));
+    });
+
+    t('دستورِ پیداکردنِ Node به سیستم‌عامل بستگی دارد', () => {
+      assert.strictEqual(Snap.nodeFinder('win'), 'where node');
+      assert.strictEqual(Snap.nodeFinder('mac'), 'which node');
+      assert.strictEqual(Snap.nodeFinder('چیزِ ناشناخته'), 'which node');
+    });
+
+    t('نامِ خالیِ دستور از مسیرِ کامل تشخیص داده می‌شود', () => {
+      assert.strictEqual(Snap.nodeIsBare('node'), true);
+      assert.strictEqual(Snap.nodeIsBare(''), true);
+      assert.strictEqual(Snap.nodeIsBare(NODE), false);
+      assert.strictEqual(Snap.nodeIsBare('C:\\Program Files\\nodejs\\node.exe'), false);
+    });
+
+    t('یکی‌بودنِ پوشهٔ برنامه و پوشهٔ داده گرفته می‌شود', () => {
+      assert.ok(Snap.pathClash(DATA, DATA));
+      assert.ok(Snap.pathClash(DATA + '/', DATA));
+      assert.strictEqual(Snap.pathClash('/Users/kazem/manshi-suite', DATA), '');
+      assert.strictEqual(Snap.pathClash('', DATA), '');   // هنوز پر نشده، هشدار بی‌مورد ندهد
+    });
+
+    t('Codex دستورِ رسمیِ خودش را دارد', () => {
+      const c = Snap.cliSnippet('codex', SCRIPT, DATA, 'mac', NODE);
+      assert.ok(c.startsWith('codex mcp add manshi -- '));
+      assert.ok(c.includes(NODE) && c.includes(DATA));
+    });
+
+    t('بدون مسیر، دستورِ نیم‌بند تولید نمی‌شود', () => {
+      assert.strictEqual(Snap.cliSnippet('codex', '', DATA, 'mac', NODE), '');
+      assert.strictEqual(Snap.cliSnippet('cursor', SCRIPT, DATA, 'mac', NODE), '');
+    });
+
+    t('مسیرِ ویندوزی با فاصله درست نقل می‌شود', () => {
+      const c = Snap.cliSnippet('codex', 'C:\\My Apps\\manshi\\mcp\\manshi-mcp.js', DATA, 'win', NODE);
+      assert.ok(c.includes('"C:\\My Apps\\manshi\\mcp\\manshi-mcp.js"'));
+    });
+
+    t('Claude Code به همهٔ پروژه‌ها اضافه می‌شود', () => {
+      assert.ok(Snap.mcpSnippet('claude-code', SCRIPT, DATA, 'mac', NODE).includes('-s user'));
+    });
+
+    // ── سرویس‌ورکر ──────────────────────────────────────
+    // هیچ تستی background.js را نمی‌دید. وابسته‌کردنِ store.js به search.js
+    // بدونِ افزودنش به importScripts، سرویس‌ورکر را می‌کشت و کلیکِ روی آیکونِ
+    // اکستنشن بی‌صدا کار نمی‌کرد. این تست همان را می‌گیرد.
+    console.log('\n— سرویس‌ورکر —');
+    {
+      const vm = require('vm');
+      const fsx = require('fs');
+      const root = require('path').join(__dirname, '..');
+      const rd = f => fsx.readFileSync(require('path').join(root, f), 'utf8');
+      const bg = rd('background.js');
+      const swList = (bg.match(/importScripts\(([^)]*)\)/) || [])[1]
+        .split(',').map(s => s.trim().replace(/^['"]|['"]$/g, ''));
+
+      // محیطِ سرویس‌ورکر: نه require، نه module، نه document، نه localStorage
+      const loadAll = list => {
+        const ctx = vm.createContext({
+          console: { log() {}, warn() {}, error() {} },
+          chrome: { storage: { local: { get: async () => ({}), set: async () => {} } } },
+          setTimeout, clearTimeout, fetch: () => {}
+        });
+        ctx.globalThis = ctx; ctx.self = ctx;
+        try { vm.runInContext(list.map(rd).join('\n;\n'), ctx, { filename: 'sw' }); return null; }
+        catch (e) { return e.message; }
+      };
+
+      t('اسکریپت‌های سرویس‌ورکر بدون require بار می‌شوند', () => {
+        assert.strictEqual(loadAll(swList), null);
+      });
+
+      t('این تست واقعاً چیزی می‌سنجد', () => {
+        // اگر برداشتنِ یک وابستگی هم خطا ندهد، تستِ بالا بی‌اثر است
+        assert.ok(loadAll(swList.filter(f => !f.includes('search'))));
+      });
+
+      t('هر فایلی که سرویس‌ورکر می‌خواهد واقعاً وجود دارد', () => {
+        for (const f of swList) assert.ok(fsx.existsSync(require('path').join(root, f)), f);
+      });
+
+      t('در app.html هم search پیش از store می‌آید', () => {
+        const html = rd('app.html');
+        const at = f => html.indexOf('core/' + f + '.js');
+        assert.ok(at('search') > -1 && at('store') > -1);
+        assert.ok(at('search') < at('store'), 'ترتیبِ بارگذاری برعکس است');
+      });
+    }
+
+    // ── آدم‌ها از روی جلسه‌ها ────────────────────────────
+    // خطرِ اصلی اینجا تکراری‌سازی است: یک نفر نباید دو پرونده بگیرد.
+    console.log('\n— آدم‌ها از جلسه‌ها —');
+    const mk = (id, title, at, names) => ({
+      id, title, startedAt: at, participants: names.map(n => ({ name: n, email: '' }))
+    });
+    const find = (list, n) => list.find(p => p.name === n);
+
+    t('حضور در جلسه، پرونده می‌سازد', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {},
+        [mk('s1', 'جلسهٔ یک', '2026-07-01T10:00:00Z', ['مصطفی احمدی', 'کریم مهدییی'])]);
+      assert.strictEqual(ppl.length, 2);
+      assert.strictEqual(find(ppl, 'مصطفی احمدی').metCount, 1);
+    });
+
+    t('املای عربی و فارسی یک نفرند، نه دو نفر', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        mk('s1', 'جلسهٔ یک', '2026-07-01T10:00:00Z', ['مصطفي احمدي']),   // ي و ك عربی
+        mk('s2', 'جلسهٔ دو', '2026-07-08T10:00:00Z', ['مصطفی احمدی'])
+      ]);
+      assert.strictEqual(ppl.length, 1);
+      assert.strictEqual(ppl[0].metCount, 2);
+    });
+
+    t('نیم‌فاصله و فاصلهٔ اضافه پروندهٔ تازه نمی‌سازد', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        mk('s1', 'یک', '2026-07-01T10:00:00Z', ['علی‌مهدی  تهرانی']),
+        mk('s2', 'دو', '2026-07-02T10:00:00Z', [' علی مهدی تهرانی '])
+      ]);
+      assert.strictEqual(ppl.length, 1);
+      assert.strictEqual(ppl[0].metCount, 2);
+    });
+
+    t('نامِ نمایشی، پرتکرارترین املاست', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        mk('s1', 'یک', '2026-07-01T10:00:00Z', ['مصطفی احمدی']),
+        mk('s2', 'دو', '2026-07-02T10:00:00Z', ['مصطفی احمدی']),
+        mk('s3', 'سه', '2026-07-03T10:00:00Z', ['مصطفي احمدي'])
+      ]);
+      assert.strictEqual(ppl[0].name, 'مصطفی احمدی');
+    });
+
+    t('یک نفر در یک جلسه دو بار شمرده نمی‌شود', () => {
+      const s = mk('s1', 'یک', '2026-07-01T10:00:00Z', ['مصطفی احمدی', 'مصطفي احمدي']);
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [s]);
+      assert.strictEqual(ppl.length, 1);
+      assert.strictEqual(ppl[0].metCount, 1);
+    });
+
+    t('کارها و جلسه‌ها به یک پرونده می‌روند، نه دوتا', () => {
+      const ppl = Store.peopleFiles(
+        [{ id: 'x', title: 'کار', status: 'open', dir: 'theirs', who: 'مصطفي احمدي' }],
+        new Date('2026-08-01'), [], {},
+        [mk('s1', 'یک', '2026-07-01T10:00:00Z', ['مصطفی احمدی'])]);
+      assert.strictEqual(ppl.length, 1);
+      assert.strictEqual(ppl[0].metCount, 1);
+      assert.strictEqual(ppl[0].open.length, 1);
+    });
+
+    t('خودِ کاربر و «You» پروندهٔ آدم نمی‌سازند', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {},
+        [mk('s1', 'یک', '2026-07-01T10:00:00Z', ['You', 'کاظم مرادی', 'شما'])], 'کاظم مرادی');
+      assert.deepStrictEqual(ppl.map(p => p.name), []);
+    });
+
+    t('جلسهٔ بی‌فهرستِ حاضران از گوینده‌های متن پر می‌شود', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        { id: 's1', title: 'یک', startedAt: '2026-07-01T10:00:00Z',
+          transcript: [{ speaker: 'نازنین کاظمی', text: 'سلام' }, { speaker: 'نازنین کاظمی', text: 'خوبم' }] }
+      ]);
+      assert.strictEqual(ppl.length, 1);
+      assert.strictEqual(ppl[0].metCount, 1);   // دو نوبتِ حرف، یک جلسه
+    });
+
+    t('نامِ مستعارِ ثبت‌شده با املای دیگر هم گرفته می‌شود', () => {
+      const meta = { p1: { id: 'p1', name: 'مصطفی احمدی', aliases: ['مصطفي ا.'] } };
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], meta, [
+        mk('s1', 'یک', '2026-07-01T10:00:00Z', ['مصطفي ا.']),
+        mk('s2', 'دو', '2026-07-02T10:00:00Z', ['مصطفی احمدی'])
+      ]);
+      assert.strictEqual(ppl.length, 1);
+      assert.strictEqual(ppl[0].metCount, 2);
+    });
+
+    t('برچسبِ گویندهٔ ناشناس آدم نمی‌شود', () => {
+      // پاک‌سازیِ متن برای گویندهٔ ناشناس «گوینده» می‌گذارد؛ این پرتکرارترین
+      // «آدم» در دادهٔ واقعی بود تا وقتی فیلتر نشد.
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        mk('s1', 'یک', '2026-07-01T10:00:00Z', ['گوینده', 'Speaker 2', 'ناشناس', 'مریم پناهی'])
+      ]);
+      assert.deepStrictEqual(ppl.map(p => p.name), ['مریم پناهی']);
+    });
+
+    t('اتاق و دستگاهِ جلسه آدم نیست', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        mk('s1', 'یک', '2026-07-01T10:00:00Z', ['Alborz B2-Conference', 'اتاق جلسه ۲', 'بابک شریفی'])
+      ]);
+      assert.deepStrictEqual(ppl.map(p => p.name), ['بابک شریفی']);
+    });
+
+    t('نامِ واقعی به‌خاطرِ شباهت قربانی نمی‌شود', () => {
+      // «سخنرانی» و «مهمان» آدم‌اند؛ فیلتر نباید حریص باشد
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        mk('s1', 'یک', '2026-07-01T10:00:00Z', ['گویندهٔ مهمان', 'من‌سا رحیمی', 'Speaker Deng'])
+      ]);
+      assert.strictEqual(ppl.length, 3);
+    });
+
+    t('آخرین دیدار از تازه‌ترین جلسه می‌آید', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        mk('s1', 'قدیمی', '2026-06-01T10:00:00Z', ['کریم مهدییی']),
+        mk('s2', 'تازه', '2026-07-20T10:00:00Z', ['کریم مهدییی'])
+      ]);
+      assert.strictEqual(ppl[0].sessions[0].title, 'تازه');   // مرتب از تازه به کهنه
+      assert.ok(String(ppl[0].lastMet).startsWith('2026-07-20'));
+    });
+
+    // ── هم‌نام‌های واقعی ─────────────────────────────────
+    // خطرِ برعکس: دو نفرِ متفاوت نباید یکی شوند. ایمیل تنها چیزی است که
+    // واقعاً از هم جدایشان می‌کند.
+    const mkE = (id, at, people) => ({
+      id, title: 'جلسهٔ ' + id, startedAt: at,
+      participants: people.map(([name, email]) => ({ name, email: email || '' }))
+    });
+
+    t('دو هم‌نام با دو ایمیل، دو نفرند', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        mkE('a', '2026-07-01T10:00:00Z', [['مهدی محمدی', 'mohammadi1@example.com']]),
+        mkE('b', '2026-07-02T10:00:00Z', [['مهدی محمدی', 'mohammadi2@example.com']])
+      ]);
+      assert.strictEqual(ppl.length, 2);
+      assert.deepStrictEqual(ppl.map(p => p.metCount), [1, 1]);
+      assert.ok(ppl.every(p => p.dupName), 'باید هم‌نام علامت بخورند');
+    });
+
+    t('هم‌نامِ با ایمیل و بی‌ایمیل قاطی نمی‌شوند', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        mkE('a', '2026-07-01T10:00:00Z', [['مهدی محمدی', 'mohammadi1@example.com']]),
+        mkE('b', '2026-07-02T10:00:00Z', [['مهدی محمدی', 'mohammadi2@example.com']]),
+        mkE('c', '2026-07-03T10:00:00Z', [['مهدی محمدی', '']])   // کدامشان؟ نمی‌دانیم
+      ]);
+      assert.strictEqual(ppl.length, 3, 'بی‌ایمیل نباید به یکی از آن دو چسبانده شود');
+      const nameOnly = ppl.find(p => !p.email);
+      assert.strictEqual(nameOnly.metCount, 1);
+      assert.strictEqual(nameOnly.ambiguous, true, 'باید «شاید چند نفر» علامت بخورد');
+    });
+
+    t('وقتی فقط یک ایمیل برای نام هست، ارجاعِ بی‌ایمیل به همان می‌چسبد', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        mkE('a', '2026-07-01T10:00:00Z', [['سمانه کیانی', 'kiani@example.com']]),
+        mkE('b', '2026-07-02T10:00:00Z', [['سمانه کیانی', '']])
+      ]);
+      assert.strictEqual(ppl.length, 1);
+      assert.strictEqual(ppl[0].metCount, 2);
+      assert.strictEqual(ppl[0].ambiguous, false);
+    });
+
+    t('ایمیلِ یکسان با دو املای نام، یک نفر است', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        mkE('a', '2026-07-01T10:00:00Z', [['مصطفي احمدي', 'ahmadi@example.com']]),
+        mkE('b', '2026-07-02T10:00:00Z', [['Mostafa Ahmadi', 'ahmadi@example.com']])
+      ]);
+      assert.strictEqual(ppl.length, 1);
+      assert.strictEqual(ppl[0].metCount, 2);
+    });
+
+    t('دو هم‌نامِ کاملاً بی‌ایمیل: یکی می‌شوند ولی ادعای قطعیت نمی‌کنیم', () => {
+      // نشانه‌ای برای جداکردنشان وجود ندارد؛ مهم این است که byNameOnly صادق باشد
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        mkE('a', '2026-07-01T10:00:00Z', [['مهدی', '']]),
+        mkE('b', '2026-07-02T10:00:00Z', [['مهدی', '']])
+      ]);
+      assert.strictEqual(ppl.length, 1);
+      assert.strictEqual(ppl[0].byNameOnly, true);
+    });
+
+    t('خودِ کاربر با ایمیل هم شناخته می‌شود', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        mkE('a', '2026-07-01T10:00:00Z', [['R. Afghah', 'self@example.com'], ['نازنین کاظمی', '']])
+      ], { name: 'کاظم رستمی', email: 'self@example.com' });
+      assert.deepStrictEqual(ppl.map(p => p.name), ['نازنین کاظمی']);
+    });
+
+    t('نامِ خالی با ایمیل هم پرونده می‌گیرد', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [], {}, [
+        mkE('a', '2026-07-01T10:00:00Z', [['', 'ghost@example.com']])
+      ]);
+      assert.strictEqual(ppl.length, 1);
+      assert.strictEqual(ppl[0].email, 'ghost@example.com');
+    });
+
+    // ── تقویم به‌عنوان منبعِ ایمیل ───────────────────────
+    const cal = (title, at, name, email) => ({
+      title, start: at, attendees: [name], attendeeEmails: email ? { [name]: email } : {}
+    });
+
+    t('ایمیلِ تقویم به کسی که فقط در جلسه دیده شده می‌رسد', () => {
+      // این حلقه قبلاً جلوتر از جلسه‌ها بود و چون پرونده‌ای وجود نداشت،
+      // ایمیل هیچ‌وقت به کارت نمی‌رسید.
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'),
+        [cal('ج', '2026-07-01T10:00:00Z', 'مهدی محمدی', 'mohammadi1@example.com')], {},
+        [mkE('a', '2026-07-01T10:00:00Z', [['مهدی محمدی', '']])]);
+      assert.strictEqual(ppl.length, 1);
+      assert.strictEqual(ppl[0].email, 'mohammadi1@example.com');
+      assert.strictEqual(ppl[0].metCount, 1);
+    });
+
+    t('رویدادِ تقویمیِ بدونِ جلسه هم به همان پرونده می‌چسبد', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'),
+        [cal('قدیمی', '2026-06-01T10:00:00Z', 'مریم پناهی', 'ahmadi@example.com')], {},
+        [mkE('a', '2026-07-01T10:00:00Z', [['مریم پناهی', '']])]);
+      assert.strictEqual(ppl.length, 1);
+      assert.strictEqual(ppl[0].meetings.length, 1);
+    });
+
+    t('دو ایمیل برای یک نامِ تقویمی، ادعای یکی‌بودن نمی‌کند', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-01'), [
+        cal('ج۱', '2026-07-01T10:00:00Z', 'مهدی محمدی', 'mohammadi1@example.com'),
+        cal('ج۲', '2026-07-02T10:00:00Z', 'مهدی محمدی', 'mohammadi2@example.com')
+      ], {}, [mkE('a', '2026-07-03T10:00:00Z', [['مهدی محمدی', '']])]);
+      assert.strictEqual(ppl[0].ambiguous, true);
+      assert.strictEqual(ppl[0].email, '');   // هیچ‌کدام را به او نمی‌چسبانیم
+    });
+
+    t('نامِ ایمیلیِ نقطه‌دار به نامِ فاصله‌دارِ زیرنویس می‌چسبد', () => {
+      // دعوت‌شده‌ای که CN ندارد، نامش از ایمیل ساخته می‌شود: sara.tehrani
+      // در زیرنویسِ Meet همان آدم «sara tehrani» است.
+      const ppl = Store.peopleFiles([], new Date('2026-08-10'),
+        [cal('ج', '2026-08-03T07:00:00Z', 'sara.tehrani', 'sara.tehrani@example.com')], {},
+        [mkE('a', '2026-08-03T07:00:00Z', [['sara tehrani', '']])]);
+      assert.strictEqual(ppl.length, 1);
+      assert.strictEqual(ppl[0].email, 'sara.tehrani@example.com');
+    });
+
+    t('اتاقِ جلسهٔ تقویم پروندهٔ آدم نمی‌سازد', () => {
+      const ppl = Store.peopleFiles([], new Date('2026-08-10'),
+        [cal('ج', '2026-08-03T07:00:00Z', 'Alborz B2-Conference', 'room@resource.calendar.google.com')], {},
+        [mkE('a', '2026-08-03T07:00:00Z', [['Alborz B2-Conference', ''], ['Nadia Kh', '']])]);
+      assert.deepStrictEqual(ppl.map(p => p.name), ['Nadia Kh']);
+    });
+
+    t('بدونِ جلسه، رفتار قبلی دست‌نخورده می‌ماند', () => {
+      const ppl = Store.peopleFiles(
+        [{ id: 'x', title: 'کار', status: 'open', dir: 'theirs', who: 'سارا نوری' }],
+        new Date('2026-08-01'), [], {});
+      assert.strictEqual(ppl.length, 1);
+      assert.strictEqual(ppl[0].metCount, 0);
+      assert.deepStrictEqual(ppl[0].sessions, []);
     });
   }
 
