@@ -704,7 +704,6 @@
       return;
     }
     const it = newsItems[newsIdx % newsItems.length];
-    head.append(el('span', 'news-source', it.source));
     const nav = el('div', 'news-nav');
     const mk = (txt, label, delta) => {
       const b = el('button', 'news-arrow', txt);
@@ -715,16 +714,44 @@
       });
       return b;
     };
-    nav.append(mk('‹', 'خبر قبلی', -1));
+    nav.append(mk('\u2039', 'خبر قبلی', -1));
     nav.append(el('span', 'news-pos', `${J.faDigits(newsIdx % newsItems.length + 1)}/${J.faDigits(newsItems.length)}`));
-    nav.append(mk('›', 'خبر بعدی', 1));
+    nav.append(mk('\u203a', 'خبر بعدی', 1));
     head.append(nav);
     box.append(head);
 
-    const a = el('a', 'news-link', it.title);
-    a.href = it.link; a.target = '_blank'; a.rel = 'noopener noreferrer';
-    box.append(a);
-    if (it.at) box.append(el('div', 'news-time', J.relLabel(J.iso(new Date(it.at)))));
+    // تیتر روی عکس می‌نشیند، پس خودِ قاب لینک است — نه فقط متن.
+    const hero = el('a', 'news-hero');
+    hero.href = it.link; hero.target = '_blank'; hero.rel = 'noopener noreferrer';
+
+    // نشانِ منبع پشتِ عکس می‌ماند: اگر عکسی نبود یا نیامد، جای خالی دیده نشود.
+    hero.append(el('span', 'news-hero-mark', it.source));
+
+    if (it.image) {
+      const img = el('img', 'news-hero-img');
+      // referrerpolicy: سایتِ میزبانِ عکس نباید بفهمد از کجا آمده‌ای.
+      img.referrerPolicy = 'no-referrer';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.alt = '';                       // تزئینی است؛ تیتر خودش متن دارد
+      // فیدها پر از عکسِ مرده‌اند؛ قابِ خالی بدتر از نبودِ عکس است
+      img.addEventListener('error', () => { img.remove(); hero.classList.add('is-blank'); });
+      img.src = it.image;
+      hero.append(img);
+    } else hero.classList.add('is-blank');
+
+    hero.append(el('span', 'news-hero-scrim'));
+    hero.append(el('span', 'news-hero-title', it.title));
+    box.append(hero);
+
+    const foot = el('div', 'news-foot');
+    foot.append(el('span', 'news-source', it.source));
+    if (it.at) foot.append(el('span', 'news-time', J.relLabel(J.iso(new Date(it.at)))));
+    box.append(foot);
+
+    // عکسِ خبرِ بعدی از قبل گرفته می‌شود تا چرخشِ هر ۲۰ ثانیه پرش نداشته باشد
+    const next = newsItems[(newsIdx + 1) % newsItems.length];
+    if (next?.image) { const pre = new Image(); pre.referrerPolicy = 'no-referrer'; pre.src = next.image; }
   }
 
   async function renderNews(settings) {

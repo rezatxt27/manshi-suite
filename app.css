@@ -2202,12 +2202,51 @@ small { font-size: 12px; }
 }
 .news-arrow:hover { background: var(--surface-2); color: var(--text); }
 .news-pos { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; min-width: 34px; text-align: center; }
-.news-link {
-  color: var(--text); font-size: 15px; font-weight: 700; line-height: 1.75; text-decoration: none;
-  transition: color var(--dur) var(--ease);
-}
-.news-link:hover { color: var(--accent-text); text-decoration: underline; }
 .news-time, .news-empty { font-size: 12px; color: var(--text-3); }
+
+/* ── هیروِ خبر ──────────────────────────────────────────
+   قد از نسبتِ تصویر نمی‌آید، وگرنه هر خبر با عکسی به نسبتِ دیگر، صفحهٔ «امروز»
+   را بالا و پایین می‌پراند. با عرض بزرگ می‌شود ولی سقف دارد، و سقفِ دوم روی
+   بلندیِ پنجره است تا در نمایشگرِ کوتاه کلِ صفحه را نخورد. */
+.news-hero {
+  position: relative; display: block; overflow: hidden;
+  height: clamp(160px, min(19vw, 26vh), 250px);
+  border-radius: var(--radius-sm); text-decoration: none;
+  background: linear-gradient(140deg, #1e2635, #0e131d);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+  animation: newsHeroIn 320ms var(--ease);
+}
+/* خبر هر ۲۰ ثانیه عوض می‌شود؛ بدون این، جهشِ ناگهانی گوشهٔ چشم را می‌زند */
+@keyframes newsHeroIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.news-hero-img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  transition: transform 420ms var(--ease);
+}
+.news-hero:hover .news-hero-img { transform: scale(1.03); }
+/* نامِ منبع پشتِ عکس؛ فقط وقتی عکسی نیست دیده می‌شود */
+.news-hero-mark {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 30px; font-weight: 900; color: #fff; opacity: .13; letter-spacing: .03em;
+}
+/* سایه فقط پایینِ عکس، تا تیتر خوانا باشد و عکس هم دیده شود */
+.news-hero-scrim {
+  position: absolute; inset: auto 0 0 0; height: 78%; pointer-events: none;
+  background: linear-gradient(to top, rgba(7,10,16,.93) 8%, rgba(7,10,16,.66) 44%, rgba(7,10,16,0) 100%);
+}
+.news-hero-title {
+  position: absolute; inset: auto 14px 12px 14px; color: #fff;
+  font-size: 15.5px; font-weight: 800; line-height: 1.7;
+  text-shadow: 0 1px 10px rgba(0,0,0,.55);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.news-hero:hover .news-hero-title { text-decoration: underline; text-underline-offset: 3px; }
+.news-hero:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.news-foot { display: flex; align-items: center; gap: 9px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .news-hero-img, .news-hero:hover .news-hero-img { transition: none; transform: none; }
+  .news-hero { animation: none; }
+}
 
 /* تشخیصِ وضعیت فید اخبار */
 .news-diag { margin-top: 9px; display: flex; flex-direction: column; gap: 6px; }
