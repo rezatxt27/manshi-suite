@@ -1223,14 +1223,30 @@ t('peopleFiles گروه‌بندی درست', () => {
 
     // سلامتِ ضبط (M‑۱)
     // content.js برای مرورگر نوشته شده — کمترین DOM لازم را شبیه‌سازی می‌کنیم
-    const stubEl = () => ({
-      id: '', type: '', title: '', textContent: '', innerHTML: '',
-      classList: { add() {}, remove() {}, toggle() {} },
-      setAttribute() {}, appendChild() {}, append() {}, remove() {},
-      querySelector: () => null, addEventListener() {}
-    });
+    // عنصرها نگه داشته می‌شوند و شنونده‌هایشان ثبت — تا بشود کشیدن و کلید را
+    // واقعاً شلیک کرد، نه فقط اجرا شدنِ کد را دید.
+    const created = [];
+    const stubEl = () => {
+      const el = {
+        id: '', type: '', title: '', textContent: '', innerHTML: '', tabIndex: 0,
+        style: {}, offsetWidth: 160, offsetHeight: 40, _on: {},
+        classList: { add() {}, remove() {}, toggle() {} },
+        setAttribute() {}, appendChild() {}, append() {}, remove() {},
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 160, height: 40 }),
+        setPointerCapture() {},
+        querySelector: () => null,
+        addEventListener(type, fn) { (this._on[type] ||= []).push(fn); }
+      };
+      created.push(el);
+      return el;
+    };
     global.window = global;
-    global.window.addEventListener = () => {};
+    const winOn = {};
+    global.addEventListener = (type, fn) => { (winOn[type] ||= []).push(fn); };
+    global.window.addEventListener = global.addEventListener;
+    // کنترلِ شناور به اندازهٔ پنجره نیاز دارد تا جایش را محدود کند
+    global.innerWidth = 1280;
+    global.innerHeight = 800;
     global.document = {
       title: 'جلسهٔ تست - Google Meet',
       createElement: stubEl,
@@ -1240,7 +1256,18 @@ t('peopleFiles گروه‌بندی درست', () => {
       addEventListener() {}, hidden: false
     };
     global.MutationObserver = class { observe() {} disconnect() {} };
-    global.chrome = { runtime: { id: 'test', onMessage: { addListener() {} }, sendMessage: () => Promise.resolve({}) } };
+    // جای دکمه تنها چیزی است که content.js در storage می‌نویسد؛ پس شمارشِ نوشتن‌ها
+    // مستقیماً رفتارِ همان را می‌سنجد.
+    const savedPos = { x: 900, y: 600 };
+    const posStore = {};
+    let posWrites = 0;
+    global.chrome = {
+      runtime: { id: 'test', onMessage: { addListener() {} }, sendMessage: () => Promise.resolve({}) },
+      storage: { local: {
+        get: (key, cb) => cb({ [key]: savedPos }),
+        set: (obj) => { posWrites++; Object.assign(posStore, obj); }
+      } }
+    };
     global.location = { href: 'https://meet.google.com/abc' };
     const { assessCapture, mergeCaptionSafe } = require('../content.js');
     const T0 = 1000000;
@@ -1361,6 +1388,75 @@ t('peopleFiles گروه‌بندی درست', () => {
       assert.ok(!/بروز نمی‌شود/.test(warn.text), warn.text);
       assert.ok(/شنیده نشد/.test(warn.text), warn.text);
     });
+
+    // ── جای کنترلِ شناور ─────────────────────────────────
+    // هیچ گوشه‌ای برای همهٔ چیدمان‌های Meet درست نیست، پس کاربر جایش را انتخاب
+    // می‌کند. قرارِ اصلی: کوچک‌شدنِ پنجره فقط نمایش را جمع کند، نه انتخابِ او را.
+    const badge = created.find(e => e.id === 'meetnote-status');
+    const grip = created.find(e => e.id === 'manshi-capture-grip');
+    const fire = (type) => (winOn[type] || []).forEach(fn => fn());
+    const press = (key) => grip._on.keydown.forEach(fn => fn({ key, shiftKey: false, preventDefault() {} }));
+    const dragTo = (x, y) => {
+      grip._on.pointerdown.forEach(fn => fn({ clientX: 0, clientY: 0, pointerId: 1, preventDefault() {} }));
+      grip._on.pointermove.forEach(fn => fn({ clientX: x, clientY: y }));
+      grip._on.pointerup.forEach(fn => fn({}));
+    };
+    const resizeTo = (w, h) => { global.innerWidth = w; global.innerHeight = h; fire('resize'); };
+    // تایمرِ ساختگی: تأخیرِ ذخیره باید سنجیده شود، نه اینکه تست ۳۰۰ms صبر کند
+    const withFakeTimers = (fn) => {
+      const realSet = global.setTimeout, realClear = global.clearTimeout;
+      const timers = new Map();
+      let nextId = 1;
+      global.setTimeout = (cb) => { const id = nextId++; timers.set(id, cb); return id; };
+      global.clearTimeout = (id) => { timers.delete(id); };
+      try { return fn(timers); }
+      finally { global.setTimeout = realSet; global.clearTimeout = realClear; }
+    };
+
+    t('جای دکمه: جای ذخیره‌شده هنگام بارگذاری برمی‌گردد', () =>
+      assert.strictEqual(badge.style.inset, '600px auto auto 900px'));
+
+    t('جای دکمه: کشیدن جای تازه را می‌نشاند و یک‌بار ذخیره می‌کند', () => {
+      const before = posWrites;
+      dragTo(1000, 700);
+      assert.strictEqual(badge.style.inset, '700px auto auto 1000px');
+      assert.strictEqual(posWrites, before + 1, 'کشیدن باید دقیقاً یک نوشتن باشد');
+      assert.deepStrictEqual(posStore.manshi_badge_pos, { x: 1000, y: 700 });
+    });
+
+    t('جای دکمه: پنجرهٔ کوچک دکمه را داخل کادر نگه می‌دارد', () => {
+      resizeTo(600, 400);
+      assert.strictEqual(badge.style.inset, '348px auto auto 428px');
+    });
+
+    // قلبِ ماجرا: پیش‌تر کلمپ روی خودِ خواستهٔ کاربر می‌نشست و آن را برای همیشه
+    // پاک می‌کرد — با بزرگ‌شدنِ دوبارهٔ پنجره هم دکمه برنمی‌گشت.
+    t('جای دکمه: با برگشتنِ فضا به جای انتخابیِ کاربر برمی‌گردد', () => {
+      const before = posWrites;
+      resizeTo(1280, 800);
+      assert.strictEqual(badge.style.inset, '700px auto auto 1000px');
+      assert.strictEqual(posWrites, before, 'تغییرِ اندازهٔ پنجره نباید چیزی بنویسد');
+    });
+
+    t('جای دکمه: ده فشارِ کلید یک نوشتن است، نه ده تا', () => withFakeTimers((timers) => {
+      const before = posWrites;
+      for (let i = 0; i < 10; i++) press('ArrowUp');
+      assert.strictEqual(posWrites, before, 'تا پیش از سررسیدنِ تأخیر نباید بنویسد');
+      assert.strictEqual(badge.style.inset, '620px auto auto 1000px', 'ولی حرکت باید فوری دیده شود');
+      assert.strictEqual(timers.size, 1, 'باید فقط یک تایمر در صف مانده باشد');
+      [...timers.values()].forEach(cb => cb());
+      assert.strictEqual(posWrites, before + 1);
+      assert.deepStrictEqual(posStore.manshi_badge_pos, { x: 1000, y: 620 });
+    }));
+
+    t('جای دکمه: بستنِ تب تأخیرِ معلق را از دست نمی‌دهد', () => withFakeTimers(() => {
+      const before = posWrites;
+      press('ArrowLeft');
+      assert.strictEqual(posWrites, before, 'هنوز در صف است');
+      fire('pagehide');
+      assert.strictEqual(posWrites, before + 1, 'pagehide باید صف را فوری خالی کند');
+      assert.deepStrictEqual(posStore.manshi_badge_pos, { x: 992, y: 620 });
+    }));
   }
 
   // ═══════ کیوسک (کاملاً آفلاین) ═══════

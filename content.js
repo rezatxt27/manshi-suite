@@ -49,9 +49,114 @@
   toggleBtn.id = "manshi-capture-toggle";
   toggleBtn.type = "button";
   toggleBtn.innerHTML = '<i aria-hidden="true"></i><span>شروع ثبت جلسه</span>';
-  badge.appendChild(toggleBtn);
   const setToggleLabel = (txt) => { const s = toggleBtn.querySelector("span"); if (s) s.textContent = txt; };
+  const grip = document.createElement("span");
+  grip.id = "manshi-capture-grip";
+  grip.title = "برای جابه‌جایی بکش";
+  // ردیفِ کنترل جداست تا راهنما زیرش بیاید، نه کنارش
+  const row = document.createElement("div");
+  row.id = "manshi-capture-row";
+  row.appendChild(toggleBtn);
+  row.appendChild(grip);
+  badge.appendChild(row);
   document.documentElement.appendChild(badge);
+
+  // ── جای دکمه ─────────────────────────────────────────
+  // پیش‌فرضِ قبلی بالا-راست بود، که هم زیرِ کنترل‌های خودِ Meet می‌رفت و هم با باز
+  // شدن پنلِ کناری پوشانده می‌شد. هیچ گوشه‌ای برای همهٔ چیدمان‌ها درست نیست، پس
+  // جایش را کاربر تعیین می‌کند و همان‌جا یادش می‌ماند.
+  // runtimeAlive پایین‌تر تعریف می‌شود و اینجا هنوز در TDZ است؛ نسخهٔ محلی.
+  const runtimeAliveSafe = () => Boolean(globalThis.chrome?.runtime?.id && chrome.storage?.local);
+  const POS_KEY = "manshi_badge_pos";
+  const MARGIN = 12;
+
+  // دو جا، نه یکی. `wanted` خواستهٔ کاربر است و `shown` جایی که واقعاً رسم شده.
+  // اگر یکی بودند، کوچک‌کردنِ پنجره خواستهٔ کاربر را روی مقدارِ کلمپ‌شده بازنویسی
+  // می‌کرد و با بزرگ‌شدنِ دوباره هم دکمه به جای انتخابی برنمی‌گشت.
+  let wanted = null;                    // { x, y } از گوشهٔ بالا-چپ — همین ذخیره می‌شود
+  let shown = null;                     // کلمپ‌شدهٔ wanted در اندازهٔ فعلیِ پنجره
+
+  function clampPos(p) {
+    const w = badge.offsetWidth || 160, h = badge.offsetHeight || 40;
+    return {
+      x: Math.min(Math.max(MARGIN, p.x), Math.max(MARGIN, innerWidth - w - MARGIN)),
+      y: Math.min(Math.max(MARGIN, p.y), Math.max(MARGIN, innerHeight - h - MARGIN))
+    };
+  }
+  function renderPos() {
+    if (!wanted) return;
+    shown = clampPos(wanted);
+    badge.style.inset = shown.y + "px auto auto " + shown.x + "px";
+  }
+  function moveTo(p) { wanted = p; renderPos(); }
+  // پایین-چپ: نوارِ کنترلِ Meet وسط و پایین است، پنل‌هایش سمت راست.
+  const defaultPos = () => ({ x: MARGIN, y: Math.max(MARGIN, innerHeight - (badge.offsetHeight || 40) - 96) });
+
+  // نوشتن روی storage با تأخیر جمع می‌شود — نگه‌داشتنِ کلیدِ جهت‌دار وگرنه ده‌ها
+  // نوشتنِ پشت‌سرهم می‌سازد. کشیدن با ماوس یک‌بار و فوری ذخیره می‌شود.
+  let posSaveTimer = 0;
+  function savePos(immediate = false) {
+    clearTimeout(posSaveTimer);
+    posSaveTimer = 0;
+    const write = () => {
+      if (!wanted || !runtimeAliveSafe()) return;
+      try { chrome.storage.local.set({ [POS_KEY]: wanted }); } catch {}
+    };
+    if (immediate) write();
+    else posSaveTimer = setTimeout(() => { posSaveTimer = 0; write(); }, 300);
+  }
+
+  if (runtimeAliveSafe()) {
+    try {
+      chrome.storage.local.get(POS_KEY, (o) => {
+        const saved = o && o[POS_KEY];
+        moveTo(saved && typeof saved.x === "number" ? saved : defaultPos());
+      });
+    } catch { moveTo(defaultPos()); }
+  } else moveTo(defaultPos());
+
+  // فقط دوباره رسم می‌کند؛ خواستهٔ کاربر دست‌نخورده می‌ماند تا با برگشتنِ فضا
+  // دکمه هم به جای خودش برگردد.
+  addEventListener("resize", renderPos);
+  // اگر تب پیش از سررسیدنِ تأخیر بسته شد، جای تازه نباید از دست برود
+  addEventListener("pagehide", () => { if (posSaveTimer) savePos(true); });
+
+  // کشیدن از دستگیره. خودِ دکمه کشیده نمی‌شود تا کلیک هیچ‌وقت با کشیدن اشتباه نشود.
+  let drag = null;
+  grip.addEventListener("pointerdown", (e) => {
+    drag = { dx: e.clientX - badge.getBoundingClientRect().left, dy: e.clientY - badge.getBoundingClientRect().top };
+    grip.setPointerCapture(e.pointerId);
+    badge.classList.add("dragging");
+    e.preventDefault();
+  });
+  grip.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    moveTo({ x: e.clientX - drag.dx, y: e.clientY - drag.dy });
+  });
+  const endDrag = () => {
+    if (!drag) return;
+    drag = null;
+    badge.classList.remove("dragging");
+    savePos(true);
+  };
+  grip.addEventListener("pointerup", endDrag);
+  grip.addEventListener("pointercancel", endDrag);
+
+  // جابه‌جایی با صفحه‌کلید هم ممکن باشد — دکمه فقط با ماوس نباید قابل‌استفاده باشد
+  grip.tabIndex = 0;
+  grip.setAttribute("role", "button");
+  grip.setAttribute("aria-label", "جابه‌جایی کنترل منشی — با کلیدهای جهت‌دار");
+  grip.addEventListener("keydown", (e) => {
+    const step = e.shiftKey ? 40 : 8;
+    const d = { ArrowUp: [0, -step], ArrowDown: [0, step], ArrowLeft: [-step, 0], ArrowRight: [step, 0] }[e.key];
+    if (!d || !shown) return;
+    e.preventDefault();
+    // گام از جای دیده‌شده برداشته می‌شود، نه از خواستهٔ شاید بیرونِ کادر —
+    // وگرنه چند فشارِ اول هیچ حرکتی دیده نمی‌شد.
+    moveTo({ x: shown.x + d[0], y: shown.y + d[1] });
+    savePos();
+  });
+
   toggleBtn.addEventListener("click", () => { if (active) stopCapture(); else startCapture(); });
 
   const clean = (text = "") => text.replace(/\s+/g, " ").trim();
