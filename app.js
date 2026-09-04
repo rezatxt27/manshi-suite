@@ -595,9 +595,17 @@
     donya:     { name: 'دنیای اقتصاد',  cat: 'اقتصاد',  url: 'https://donya-e-eqtesad.com/fa/rss/allnews' },
     eghtesad:  { name: 'اقتصادنیوز',   cat: 'اقتصاد',  url: 'https://www.eghtesadnews.com/feeds' },
     khabar:    { name: 'خبرآنلاین',    cat: 'عمومی',   url: 'https://www.khabaronline.ir/rss' },
-    isna:      { name: 'ایسنا',        cat: 'عمومی',   url: 'https://www.isna.ir/rss' }
+    isna:      { name: 'ایسنا',        cat: 'عمومی',   url: 'https://www.isna.ir/rss' },
+    peivast:   { name: 'پیوست',        cat: 'فناوری',  url: 'https://peivast.com/feed/' },
+    way2pay:   { name: 'راه پرداخت',   cat: 'فناوری',  url: 'https://way2pay.ir/feed/' },
+    tejarat:   { name: 'تجارت‌نیوز',    cat: 'اقتصاد',  url: 'https://tejaratnews.com/feed' },
+    ecoiran:   { name: 'اکوایران',     cat: 'اقتصاد',  url: 'https://ecoiran.com/rss' },
+    footballi: { name: 'فوتبالی',      cat: 'ورزشی',   url: 'https://footballi.net/rss' },
+    filmnews:  { name: 'فیلم‌نیوز',     cat: 'سینما',   url: 'https://www.filmnews.ir/fa/rss/allnews' }
   };
-  const NEWS_CATS = ['فناوری', 'ورزشی', 'اقتصاد', 'عمومی'];
+  // همان فهرستی که فیدهای دلخواه با آن سنجیده می‌شوند — دو جا نوشتنش یعنی
+  // دیر یا زود از هم می‌افتند و دستهٔ تازه در یکی از دو فهرست جا می‌ماند.
+  const NEWS_CATS = Kiosk.FEED_CATS;
   const NEWS_REFRESH_MS = 10 * 60 * 1000;   // فاصلهٔ گرفتن فید تازه از سایت
   let newsItems = [], newsIdx = 0, newsTimer = null, newsLoadedAt = 0;
 
