@@ -1389,6 +1389,57 @@ t('peopleFiles گروه‌بندی درست', () => {
       assert.ok(/شنیده نشد/.test(warn.text), warn.text);
     });
 
+    // ── خلاصهٔ خبر ───────────────────────────────────────
+    // description فید HTML است و آشغالِ ثابت هم دارد؛ چیزی که زیر تیتر می‌نشیند
+    // باید متنِ تمیزِ کوتاه باشد، نه هرچه سایت فرستاده.
+    const Kiosk = require('../core/kiosk.js');
+    const sum = (h, t) => Kiosk.summaryFromHtml(h, t);
+
+    t('خلاصه: تگ‌های HTML حذف می‌شوند', () =>
+      assert.strictEqual(sum('<p>سلام <b>دنیا</b><br>خبر تازه</p>'), 'سلام دنیا خبر تازه'));
+
+    t('خلاصه: script و style اصلاً نمی‌مانند', () =>
+      assert.strictEqual(sum('<script>bad()</script>متن<style>.a{}</style>'), 'متن'));
+
+    t('خلاصه: انتیتی‌ها باز می‌شوند', () => {
+      assert.strictEqual(sum('نرخ &amp; بهره&nbsp;بالا'), 'نرخ & بهره بالا');
+      assert.strictEqual(sum('&#1662;&#1740;&#1588;'), 'پیش');
+      assert.strictEqual(sum('&laquo;نقل&raquo;'), '«نقل»');
+    });
+
+    // این پانویس ته هر خبرِ وردپرسی هست و هیچ‌چیز به خواننده نمی‌گوید
+    t('خلاصه: پانویسِ وردپرس دور ریخته می‌شود', () => {
+      assert.strictEqual(sum('متن خبر. نوشته <a>عنوان خبر</a> اولین بار در <a>دیجیاتو</a> پدیدار شد.'), 'متن خبر.');
+      assert.strictEqual(sum('Some news. The post <a>Title</a> appeared first on <a>Site</a>.'), 'Some news.');
+    });
+
+    t('خلاصه: «ادامه مطلب» ته متن حذف می‌شود', () =>
+      assert.strictEqual(sum('خبر مهمی رخ داد. ادامه مطلب…'), 'خبر مهمی رخ داد.'));
+
+    // بعضی فیدها description را همان تیتر می‌گذارند
+    t('خلاصه: تکرارِ تیتر چیزی برنمی‌گرداند', () => {
+      assert.strictEqual(sum('همان تیتر است', 'همان تیتر است'), '');
+      assert.strictEqual(sum('<p>همان تیتر است</p>', 'همان  تیتر است'), '');
+      assert.strictEqual(sum('همان تیتر است.', 'همان تیتر است'), '', 'یک نقطه بیشتر هم یعنی تکرار');
+    });
+
+    t('خلاصه: متنِ واقعاً بلندتر از تیتر می‌ماند', () => {
+      const out = sum('همان تیتر است و بعدش توضیحِ واقعی و مفصل ادامه دارد', 'همان تیتر است');
+      assert.ok(out.length > 20, out);
+    });
+
+    t('خلاصه: بلندتر از سقف بریده می‌شود، ولی نه وسطِ کلمه', () => {
+      const long = 'کلمه '.repeat(200);
+      const out = sum(long);
+      assert.ok(out.length <= Kiosk.SUMMARY_MAX + 1, `طول ${out.length}`);
+      assert.ok(out.endsWith('…'), out.slice(-12));
+      assert.ok(!/\S…$/.test(out.replace('کلمه…', 'x')) || out.endsWith('کلمه…'), 'برشِ وسطِ کلمه نباشد');
+    });
+
+    t('خلاصه: ورودی خالی یا بی‌متن، رشتهٔ خالی', () => {
+      for (const v of ['', null, undefined, '<p></p>', '   ']) assert.strictEqual(sum(v), '');
+    });
+
     // ── جای کنترلِ شناور ─────────────────────────────────
     // هیچ گوشه‌ای برای همهٔ چیدمان‌های Meet درست نیست، پس کاربر جایش را انتخاب
     // می‌کند. قرارِ اصلی: کوچک‌شدنِ پنجره فقط نمایش را جمع کند، نه انتخابِ او را.

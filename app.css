@@ -2241,7 +2241,16 @@ small { font-size: 12px; }
 }
 .news-hero:hover .news-hero-title { text-decoration: underline; text-underline-offset: 3px; }
 .news-hero:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.news-foot { display: flex; align-items: center; gap: 9px; }
+.news-foot { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.news-cat {
+  font-size: 11.5px; font-weight: 800; color: var(--violet); background: var(--violet-soft);
+  border-radius: 999px; padding: 2px 9px;
+}
+/* خلاصه، نه کلِ خبر: سه خط، و بقیه‌اش در خودِ سایت */
+.news-desc {
+  margin: 0; font-size: 13.5px; line-height: 1.95; color: var(--text-2);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .news-hero-img, .news-hero:hover .news-hero-img { transition: none; transform: none; }

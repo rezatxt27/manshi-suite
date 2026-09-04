@@ -626,9 +626,11 @@
       const when = get('pubDate') || get('published') || get('updated');
       const t = when ? new Date(when).getTime() : 0;
       const desc = get('description') || get('encoded') || get('summary');
+      const title = get('title');
       return {
-        title: get('title'), link, at: Number.isNaN(t) ? 0 : t,
-        source: source.name, cat: source.cat, image: imageOfItem(n, desc)
+        title, link, at: Number.isNaN(t) ? 0 : t,
+        source: source.name, cat: source.cat, image: imageOfItem(n, desc),
+        summary: Kiosk.summaryFromHtml(desc, title)
       };
     }).filter(x => x.title && /^https:\/\//.test(x.link));
   }
@@ -745,9 +747,13 @@
     box.append(hero);
 
     const foot = el('div', 'news-foot');
+    if (it.cat) foot.append(el('span', 'news-cat', it.cat));
     foot.append(el('span', 'news-source', it.source));
     if (it.at) foot.append(el('span', 'news-time', J.relLabel(J.iso(new Date(it.at)))));
     box.append(foot);
+
+    // خلاصه اختیاری است: خیلی از فیدها ندارند، و بلوکِ خالی بدتر از نبودش است
+    if (it.summary) box.append(el('p', 'news-desc', it.summary));
 
     // عکسِ خبرِ بعدی از قبل گرفته می‌شود تا چرخشِ هر ۲۰ ثانیه پرش نداشته باشد
     const next = newsItems[(newsIdx + 1) % newsItems.length];

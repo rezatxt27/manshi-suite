@@ -489,13 +489,48 @@ const Kiosk = (() => {
     return looksImage ? parsed.href : '';
   }
   // اولین <img> داخلِ توضیحاتِ خبر — وقتی فید تگِ عکسِ جدا ندارد
+  // ── خلاصهٔ کوتاهِ خبر از description فید ───────────────
+  // بدونِ DOMParser نوشته شده تا در Node هم تست شود و رفتارش دقیقاً همان باشد
+  // که در مرورگر است. امنیت از اینجا نمی‌آید — خروجی همیشه با textContent در
+  // صفحه می‌نشیند — پس اینجا فقط تمیزیِ متن مهم است، نه پاک‌سازیِ امنیتی.
+  const SUMMARY_MAX = 240;
+  const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', zwnj: '\u200c', laquo: '«', raquo: '»', hellip: '…', mdash: '—', ndash: '–' };
+
+  function decodeEntities(t) {
+    return t
+      .replace(/&#x([0-9a-f]+);/gi, (_, h) => { const c = parseInt(h, 16); return c ? String.fromCodePoint(c) : ''; })
+      .replace(/&#(\d+);/g, (_, d) => { const c = parseInt(d, 10); return c ? String.fromCodePoint(c) : ''; })
+      .replace(/&([a-z]+);/gi, (m, n) => ENTITIES[n.toLowerCase()] ?? m);
+  }
+
+  function summaryFromHtml(html, title = '') {
+    if (!html) return '';
+    let txt = String(html)
+      .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ');
+    txt = decodeEntities(txt)
+      // پانویسی که وردپرس ته هر خبر می‌گذارد و هیچ‌چیز به خواننده نمی‌گوید
+      .replace(/نوشته[\s\S]{0,120}?اولین بار در[\s\S]{0,80}?پدیدار شد\.?/g, ' ')
+      .replace(/The post[\s\S]{0,120}?appeared first on[\s\S]{0,80}?\./gi, ' ')
+      .replace(/(ادامه(?:\u0654| ی)?\s*(?:مطلب|خبر|مطلب را بخوانید))\s*[….]*\s*$/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    // بعضی فیدها توضیح را همان تیتر می‌گذارند؛ تکرارش زیر تیتر بی‌فایده است
+    const t = String(title || '').replace(/\s+/g, ' ').trim();
+    if (!txt || txt === t) return '';
+    if (t && txt.startsWith(t) && txt.length - t.length < 12) return '';
+    if (txt.length <= SUMMARY_MAX) return txt;
+    // وسطِ کلمه بریده نشود
+    return txt.slice(0, SUMMARY_MAX).replace(/\s+\S*$/, '') + '…';
+  }
+
   function imageFromHtml(html) {
     const m = String(html || '').match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i);
     return m ? safeImageUrl(m[1], 'image/*') : '';
   }
 
   const api = {
-    OCCASIONS, CITIES, IRAN_TZ, PRAYER_LABELS, safeImageUrl, imageFromHtml,
+    OCCASIONS, CITIES, IRAN_TZ, PRAYER_LABELS, safeImageUrl, imageFromHtml, summaryFromHtml, SUMMARY_MAX,
     occasionsOf, upcomingOccasions, nextHoliday, todayOccasions, daysUntil,
     countdowns, prayerTimes, nextPrayer, hhmm, cityByName,
     sayingOfDay, randomSaying, filterSayings, allSayings, parseQuotes, trimQuotes,
