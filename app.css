@@ -995,8 +995,14 @@ button.chip { min-height: 30px; display: inline-flex; align-items: center; }
 .field-status.ok { color: var(--accent-text); }
 .field-status.err { color: var(--red); }
 .settings-foot { color: var(--text-3); font-size: 12.5px; margin-top: 22px; text-align: center; }
-.settings-version { color: var(--text-3); font-size: 12px; margin-top: 6px; text-align: center; font-variant-numeric: tabular-nums; }
+/* پیش‌تر همه‌چیز در یک خطِ وسط‌چین جمع می‌شد و پیامِ بلند وسطِ عبارت می‌شکست
+   («گیت‌هاب دسترسی / ندارد — اجازه بده»). حالا نسخه و دکمه کنارِ هم می‌مانند و
+   پیام همیشه خطِ خودش را دارد. */
+.settings-version { color: var(--text-3); font-size: 12px; margin-top: 6px; font-variant-numeric: tabular-nums;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 8px; }
 .settings-version span { font-weight: 700; color: var(--text-2); }
+.settings-version #updateStatus { flex-basis: 100%; }
+.settings-version #updateStatus:empty { display: none; }
 
 /* ── مودال و توست ──────────────────────── */
 .modal-wrap {

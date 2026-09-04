@@ -6633,12 +6633,23 @@
 
   // ---------- خبرِ نسخهٔ تازه ----------
   // منشی از فروشگاه نصب نمی‌شود، پس خودش به‌روز نمی‌شود. فقط خبر می‌دهد.
+  const GH_ORIGIN = new URL(Updater.API).origin + '/*';
+
+  // فقط همین یک دامنه خواسته می‌شود، نه کلِ سایت‌های خبری.
+  // باید مستقیم از دلِ کلیکِ کاربر صدا زده شود، وگرنه کروم ژست را از دست‌رفته
+  // می‌بیند و پنجرهٔ اجازه اصلاً باز نمی‌شود.
+  async function requestGithubAccess() {
+    if (!Store.isExt || !chrome.permissions) return false;
+    try { return await chrome.permissions.request({ origins: [GH_ORIGIN] }); }
+    catch (_) { return false; }
+  }
+
   async function fetchRelease() {
-    const origin = new URL(Updater.API).origin + '/*';
     if (Store.isExt && chrome.permissions) {
       try {
-        const has = await chrome.permissions.contains({ origins: [origin] });
-        if (!has) return { rel: null, error: 'دسترسی به گیت‌هاب داده نشده' };
+        const has = await chrome.permissions.contains({ origins: [GH_ORIGIN] });
+        // needsPermission جداست تا فراخوان مجبور نشود متنِ خطا را تطبیق بدهد
+        if (!has) return { rel: null, error: 'دسترسی به گیت‌هاب داده نشده', needsPermission: true };
       } catch (_) { /* ادامه بده */ }
     }
     let r;
@@ -6701,19 +6712,50 @@
     await paintUpdateBanner(rel || s.lastRelease, s);
   }
 
-  $('#checkUpdate')?.addEventListener('click', async () => {
+  let updateStatusTimer = 0;
+  function updateSay(text, cls = '') {
     const st = $('#updateStatus');
-    const say = (m) => { if (st) { st.textContent = m; setTimeout(() => { st.textContent = ''; }, 5000); } };
-    say('در حال بررسی…');
-    const { rel, error } = await fetchRelease();
-    if (error) { say(error); return; }
+    if (!st) return;
+    clearTimeout(updateStatusTimer);
+    st.className = 'field-status' + (cls ? ' ' + cls : '');
+    st.replaceChildren(document.createTextNode(text));
+    updateStatusTimer = setTimeout(() => { st.replaceChildren(); st.className = 'field-status'; }, 5000);
+  }
+
+  // پیامِ «دسترسی نداده‌ای» بن‌بست بود: تنها جایی که این اجازه گرفته می‌شد دکمهٔ
+  // «دادن دسترسی به سایت‌ها»ی بخشِ اخبار بود، و ربطش به «نسخهٔ تازه» به ذهنِ
+  // کسی نمی‌رسید. حالا راهِ حل کنارِ خودِ پیام است. بدونِ تایمرِ پاک‌شدن، چون
+  // دکمه‌ای که وسطِ خواندن ناپدید شود بدتر از نبودنش است.
+  function updateAskPermission() {
+    const st = $('#updateStatus');
+    if (!st) return;
+    clearTimeout(updateStatusTimer);
+    st.className = 'field-status err';
+    st.replaceChildren(document.createTextNode('گیت‌هاب دسترسی ندارد — '));
+    const btn = el('button', 'btn-link', 'اجازه بده');
+    btn.type = 'button';
+    btn.addEventListener('click', async () => {
+      const granted = await requestGithubAccess();
+      if (!granted) { updateSay('دسترسی داده نشد', 'err'); return; }
+      runUpdateCheck();
+    });
+    st.append(btn);
+  }
+
+  async function runUpdateCheck() {
+    updateSay('در حال بررسی…');
+    const { rel, error, needsPermission } = await fetchRelease();
+    if (needsPermission) { updateAskPermission(); return; }
+    if (error) { updateSay(error, 'err'); return; }
     const cur = await appVersion();
     await Store.saveSettings({ updateCheckedAt: Date.now(), lastRelease: rel, updateSeen: '' });
     if (Updater.isNewer(rel.version, cur)) {
-      say(`نسخهٔ ${J.faDigits(rel.version)} هست — بالای صفحهٔ «امروز» ببین`);
+      updateSay(`نسخهٔ ${J.faDigits(rel.version)} هست — بالای صفحهٔ «امروز» ببین`, 'ok');
       await paintUpdateBanner(rel, { updateSeen: '' });
-    } else say('همین نسخه تازه‌ترین است ✓');
-  });
+    } else updateSay('همین نسخه تازه‌ترین است ✓', 'ok');
+  }
+
+  $('#checkUpdate')?.addEventListener('click', runUpdateCheck);
 
   // ---------- یادداشت روز ----------
   const scratchInput = $('#scratchInput');
