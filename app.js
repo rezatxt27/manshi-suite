@@ -758,7 +758,8 @@
       updateCheckOn: s.updateCheckOn !== false
     };
     const uc = $('#setUpdateCheck');
-    if (uc) { uc.checked = heroPrefs.updateCheckOn; uc.onchange = () => { heroPrefs.updateCheckOn = uc.checked; }; }
+    if (uc) { uc.checked = heroPrefs.updateCheckOn; uc.onchange = () => { heroPrefs.updateCheckOn = uc.checked; paintUpdatePermNote(); }; }
+    paintUpdatePermNote();
     const wc = $('#setWeatherOn');
     if (wc) { wc.checked = heroPrefs.weatherOn; wc.onchange = () => { heroPrefs.weatherOn = wc.checked; }; }
     customFeeds = [...(s.customFeeds || [])];
@@ -6756,6 +6757,39 @@
   }
 
   $('#checkUpdate')?.addEventListener('click', runUpdateCheck);
+
+  // تیکِ «خبرم کن» پیش‌فرض روشن است، ولی بدونِ اجازهٔ گیت‌هاب بررسیِ روزانه
+  // بی‌سروصدا هیچ‌وقت کار نمی‌کند — یعنی وعده‌ای که تیک می‌دهد هرگز عمل نمی‌شود
+  // و کاربر هم هیچ‌جا خبردار نمی‌شود. بی‌صدا بودنِ خودِ بررسی عمدی است (نباید هر
+  // بار باز کردنِ اپ هشدار بدهد)، پس اینجا هشدار نمی‌دهیم؛ فقط وضعیت را کنارِ
+  // همان تیک درست نشان می‌دهیم، با راهِ حلش.
+  async function paintUpdatePermNote() {
+    const box = $('#updatePermNote');
+    if (!box) return;
+    box.replaceChildren();
+    box.className = 'field-status';
+    const on = $('#setUpdateCheck')?.checked;
+    if (!on || !Store.isExt || !chrome.permissions) { box.hidden = true; return; }
+    let has = true;
+    // اگر نشد بفهمیم، ادعا نمی‌کنیم چیزی کم است
+    try { has = await chrome.permissions.contains({ origins: [GH_ORIGIN] }); } catch (_) { has = true; }
+    if (has) { box.hidden = true; return; }
+    box.hidden = false;
+    box.className = 'field-status err';
+    box.replaceChildren(document.createTextNode('برای این کار به دسترسی گیت‌هاب نیاز است — '));
+    const btn = el('button', 'btn-link', 'اجازه بده');
+    btn.type = 'button';
+    btn.addEventListener('click', async () => {
+      const granted = await requestGithubAccess();
+      if (!granted) return;
+      box.className = 'field-status ok';
+      box.replaceChildren(document.createTextNode('دسترسی داده شد ✓'));
+      checkUpdateQuietly();                       // همان لحظه یک بار بررسی کن
+      setTimeout(paintUpdatePermNote, 4000);      // بعد خودش را جمع می‌کند
+    });
+    box.append(btn);
+  }
+
 
   // ---------- یادداشت روز ----------
   const scratchInput = $('#scratchInput');
