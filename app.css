@@ -2379,6 +2379,13 @@ small { font-size: 12px; }
 /* ── بورس ───────────────────────────────────────────────
    اینجا سبز یعنی رشد — برعکسِ کارت ارز، که بالا رفتنِ دلار خبرِ بدی است.
    هر کارت قراردادِ حوزهٔ خودش را دارد. */
+.bz-index {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 7px 10px; margin-bottom: 8px;
+  background: var(--surface-2); border-radius: var(--radius-sm);
+}
+.bz-index-t { font-size: 11.5px; font-weight: 700; color: var(--text-3); }
+.bz-index-v { font-size: 16px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; margin-inline-start: auto; }
 .bz-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px; }
 .bz-tab {
   border: 0; background: var(--surface-2); color: var(--text-3);

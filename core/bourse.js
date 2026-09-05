@@ -12,6 +12,8 @@
 const Bourse = (() => {
   const NAME_MAX = 40;
   const TSETMC_URL = 'https://cdn.tsetmc.com/api/ClosingPrice/GetMarketWatch?market=0&paperTypes[0]=1';
+  // شاخص کل — insCode ثابتِ خودش را دارد
+  const INDEX_URL = 'https://cdn.tsetmc.com/api/Index/GetIndexB1LastDay/32097828799138957';
 
   // کنترل‌کاراکتر و جهت‌دهنده‌های یونیکد (RLO و مانندش) می‌توانند متنِ کنارشان را
   // وارونه نشان بدهند. متن اینجا فقط داده است، پس همه‌شان دور ریخته می‌شوند.
@@ -85,6 +87,46 @@ const Bourse = (() => {
     return out;
   }
 
+  // ── شاخص کل ─────────────────────────────────────────
+  // پاسخ یک عکسِ لحظه‌ای در هر چند دقیقهٔ روز است، نه یک عدد. آخرینش را
+  // برمی‌داریم: xDrNivJIdx004 مقدارِ شاخص و xVarIdxJRfV درصدِ تغییر نسبت به
+  // بستنِ دیروز. پیش از بازگشاییِ بازار، مقدار همان بستنِ دیروز است و درصد صفر.
+  function parseIndex(raw) {
+    let d = raw;
+    if (typeof raw === 'string') {
+      try { d = JSON.parse(raw); } catch (_) { return null; }
+    }
+    const list = Array.isArray(d) ? d : (Array.isArray(d?.indexB1) ? d.indexB1 : []);
+    let best = null;
+    for (const r of list) {
+      if (!r || typeof r !== 'object') continue;
+      const value = num(r.xDrNivJIdx004);
+      if (value <= 0) continue;
+      const dEven = Math.trunc(num(r.dEven));
+      const hEven = Math.trunc(num(r.hEven));
+      // دیرترین لحظهٔ روز، نه لزوماً آخرین عضوِ آرایه
+      if (best && (dEven < best.dEven || (dEven === best.dEven && hEven <= best.hEven))) continue;
+      best = { dEven, hEven, value, changePct: num(r.xVarIdxJRfV) };
+    }
+    if (!best) return null;
+    return {
+      value: best.value,
+      changePct: best.changePct,
+      at: hhmmOf(best.hEven),
+      date: dateOf(best.dEven)
+    };
+  }
+
+  // ۲۰۲۶۰۹۰۵ → { y: 2026, m: 9, d: 5 }. تاریخِ معاملاتی مهم است: اگر جمعه باشی،
+  // عددها مالِ چهارشنبه‌اند و کارت باید همین را بگوید.
+  function dateOf(dEven) {
+    const n = Math.trunc(num(dEven));
+    if (n < 10000101 || n > 99991231) return null;
+    const y = Math.floor(n / 10000), m = Math.floor(n / 100) % 100, d = n % 100;
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+    return { y, m, d };
+  }
+
   // نمادی که امروز اصلاً معامله نشده درصدش صفر است و بی‌جا بالای فهرست می‌نشیند
   const traded = (r) => r.trades > 0 && r.volume > 0;
 
@@ -124,8 +166,8 @@ const Bourse = (() => {
   }
 
   const api = {
-    TSETMC_URL, NAME_MAX,
-    cleanName, hhmmOf, parseRow, parseMarketWatch,
+    TSETMC_URL, INDEX_URL, NAME_MAX,
+    cleanName, hhmmOf, dateOf, parseRow, parseMarketWatch, parseIndex,
     topMovers, mostActive, lastTradeAt, stats
   };
   if (typeof globalThis !== 'undefined') globalThis.Bourse = api;

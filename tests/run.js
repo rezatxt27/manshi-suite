@@ -1457,6 +1457,46 @@ t('peopleFiles گروه‌بندی درست', () => {
       assert.deepStrictEqual(Bourse.topMovers(allUp, { dir: 'down' }), []);
     });
 
+    // ── شاخص کل ──────────────────────────────────────
+    // پاسخ یک عکسِ لحظه‌ای در هر چند دقیقهٔ روز است؛ سطرها از پاسخِ واقعی‌اند.
+    const idx = { indexB1: [
+      { insCode: null, dEven: 20260905, hEven: 83000, xDrNivJIdx004: 6504009.87, xVarIdxJRfV: 0.0000, last: false },
+      { insCode: null, dEven: 20260905, hEven: 90500, xDrNivJIdx004: 6615498.94, xVarIdxJRfV: 1.7142, last: false },
+      { insCode: null, dEven: 20260905, hEven: 103000, xDrNivJIdx004: 6600727.76, xVarIdxJRfV: 1.4871, last: false }
+    ] };
+
+    t('شاخص: آخرین لحظهٔ روز برداشته می‌شود', () => {
+      const r = Bourse.parseIndex(idx);
+      assert.strictEqual(r.value, 6600727.76);
+      assert.ok(Math.abs(r.changePct - 1.4871) < 1e-9);
+      assert.strictEqual(r.at, '10:30');
+      assert.deepStrictEqual(r.date, { y: 2026, m: 9, d: 5 });
+    });
+
+    // ترتیبِ آرایه تضمین‌شده نیست؛ نباید صرفاً آخرین عضو را برداریم
+    t('شاخص: ترتیبِ به‌هم‌ریخته هم درست خوانده می‌شود', () => {
+      const shuffled = { indexB1: [idx.indexB1[2], idx.indexB1[0], idx.indexB1[1]] };
+      assert.strictEqual(Bourse.parseIndex(shuffled).at, '10:30');
+    });
+
+    t('شاخص: پیش از بازگشایی، مقدارِ دیروز با درصدِ صفر', () => {
+      const pre = Bourse.parseIndex({ indexB1: [idx.indexB1[0]] });
+      assert.strictEqual(pre.changePct, 0);
+      assert.strictEqual(pre.value, 6504009.87);
+    });
+
+    t('شاخص: پاسخِ خراب یا خالی، null می‌دهد', () => {
+      for (const bad of ['', 'x', '{}', '[]', null, { indexB1: [] }, { indexB1: [{ xDrNivJIdx004: 0 }] }]) {
+        assert.strictEqual(Bourse.parseIndex(bad), null, JSON.stringify(bad));
+      }
+    });
+
+    t('شاخص: تاریخِ نامعتبر ادعا نمی‌شود', () => {
+      assert.strictEqual(Bourse.dateOf(0), null);
+      assert.strictEqual(Bourse.dateOf(20261301), null, 'ماه ۱۳ نداریم');
+      assert.deepStrictEqual(Bourse.dateOf(20260905), { y: 2026, m: 9, d: 5 });
+    });
+
     t('بورس: پرمعامله‌ترین بر اساس ارزش', () => {
       const act = Bourse.mostActive(rows, 2);
       // بر اساس ارزشِ معاملات: کرماشا ۸۸۳ میلیارد، سرود ۵۶۷ میلیارد

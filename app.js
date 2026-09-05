@@ -6228,7 +6228,16 @@
   // دیدهٔ بازارِ TSETMC یک فایلِ بزرگ است (چند مگابایت)، پس دیر به دیر گرفته
   // می‌شود و فقط نتیجهٔ خلاصه‌شده در حافظه می‌ماند، نه خودِ پاسخ.
   const BOURSE_REFRESH_MS = 15 * 60 * 1000;
-  let bourseRows = [], bourseAt = 0, bourseError = '', bourseDir = 'up';
+  let bourseRows = [], bourseIndex = null, bourseAt = 0, bourseError = '', bourseDir = 'up';
+
+  // شاخص جدا گرفته می‌شود: اگر یکی نیامد، آن یکی نباید از دست برود
+  async function loadBourseIndex() {
+    try {
+      const r = await fetch(Bourse.INDEX_URL, { cache: 'no-store', redirect: 'follow' });
+      if (!r.ok) return null;
+      return Bourse.parseIndex(await r.text());
+    } catch (_) { return null; }
+  }
 
   async function loadBourse() {
     const origin = new URL(Bourse.TSETMC_URL).origin + '/*';
@@ -6251,6 +6260,7 @@
     const rows = Bourse.parseMarketWatch(text);
     if (!rows.length) { bourseError = 'پاسخ خوانده شد ولی نمادی پیدا نشد (شاید ساختارش عوض شده)'; bourseRows = []; return; }
     bourseRows = rows; bourseError = ''; bourseAt = Date.now();
+    bourseIndex = await loadBourseIndex();
   }
 
   function bourseRow(it) {
@@ -6273,8 +6283,13 @@
   function buildBourseCard() {
     // «آخرین بروزرسانی» گمراه‌کننده است: بازار ۱۲:۳۰ بسته و ما شاید ۱۸ گرفته‌ایم.
     // ساعتِ آخرین معامله از خودِ داده می‌آید و همان چیزی است که معنا دارد.
-    const tradeAt = Bourse.lastTradeAt(bourseRows);
-    const card = kioskCard('بورس', tradeAt ? `آخرین معامله ${J.faDigits(tradeAt)}` : '');
+    const tradeAt = Bourse.lastTradeAt(bourseRows) || bourseIndex?.at || '';
+    // تاریخِ معاملاتی مهم‌تر از ساعتِ گرفتنِ فایل است: جمعه که باز کنی، عددها
+    // مالِ چهارشنبه‌اند و کارت باید همین را بگوید نه «آخرین بروزرسانی».
+    const d = bourseIndex?.date;
+    const dayLabel = d ? J.format(new Date(d.y, d.m - 1, d.d)) : '';
+    const sub = [dayLabel, tradeAt ? `آخرین معامله ${J.faDigits(tradeAt)}` : ''].filter(Boolean).join(' · ');
+    const card = kioskCard('بورس', sub);
     card.classList.add('tint-blue');
 
     if (!bourseRows.length) {
@@ -6287,6 +6302,19 @@
       why.append(grant);
       card.append(why);
       return card;
+    }
+
+    if (bourseIndex) {
+      const ix = el('div', 'bz-index');
+      ix.append(el('span', 'bz-index-t', 'شاخص کل'));
+      ix.append(el('span', 'bz-index-v', Market.faPrice(Math.round(bourseIndex.value))));
+      const p = bourseIndex.changePct;
+      const dir = p > 0.001 ? 'up' : p < -0.001 ? 'down' : 'flat';
+      const ch = el('span', 'bz-ch is-' + dir);
+      if (dir !== 'flat') ch.append(el('span', 'mk-arrow', dir === 'up' ? '\u25b2' : '\u25bc'));
+      ch.append(document.createTextNode(Market.faPercent(p)));
+      ix.append(ch);
+      card.append(ix);
     }
 
     const tabs = el('div', 'bz-tabs');
