@@ -1389,6 +1389,116 @@ t('peopleFiles گروه‌بندی درست', () => {
       assert.ok(/شنیده نشد/.test(warn.text), warn.text);
     });
 
+    // ── بورس ─────────────────────────────────────────────
+    // سطرها از پاسخِ واقعیِ cdn.tsetmc.com برداشته شده‌اند: py قیمت دیروز،
+    // pcl پایانی، pdv آخرین معامله، qtj حجم، ztt تعداد معامله، hEven ساعت.
+    const Bourse = require('../core/bourse.js');
+    const mw = {
+      marketwatch: [
+        // سیمان شاهرود: ۱۶۸۵۰ → ۱۷۳۱۰ یعنی +۲٫۷۳٪
+        { lva: 'سرود', lvc: 'سيمان شاهرود', py: 16850, pcl: 17310, pdv: 17350, qtj: 32750152, ztt: 1833, qtc: 566985828020, hEven: 122948 },
+        // قند پیرانشهر: ۱۸۱۱۰ → ۱۷۹۰۰ یعنی −۱٫۱۶٪
+        { lva: 'غپینو', lvc: 'فرآورده هاي غذايي وقندپيرانشهر', py: 18110, pcl: 17900, pdv: 17900, qtj: 1383, ztt: 1, qtc: 24755700, hEven: 125326 },
+        { lva: 'کرماشا', lvc: 'صنايع پتروشيمي کرمانشاه', py: 25120, pcl: 26630, pdv: 26660, qtj: 33170892, ztt: 1569, qtc: 883472796810, hEven: 122952 },
+        { lva: 'هرمز', lvc: 'فولاد هرمزگان', py: 3510, pcl: 3710, pdv: 3710, qtj: 30444473, ztt: 338, qtc: 112948994830, hEven: 121500 },
+        // نمادِ بازنشده: پایانی و دیروزش صفر است
+        { lva: 'سخزر3', lvc: 'سیمان خزر', py: 0, pcl: 0, pdv: 6350, qtj: 0, ztt: 0, qtc: 0, hEven: 61057 },
+        // پذیرفته‌شده ولی امروز معامله نشده — درصدش صفر است، نباید صدرنشین شود
+        { lva: 'وساخت', lvc: 'سرمایه‌گذاری ساختمان', py: 5000, pcl: 5000, pdv: 5000, qtj: 0, ztt: 0, qtc: 0, hEven: 0 }
+      ]
+    };
+    const rows = Bourse.parseMarketWatch(mw);
+
+    t('بورس: نمادِ بازنشده وارد فهرست نمی‌شود', () => {
+      assert.ok(!rows.some(r => r.symbol === 'سخزر3'), 'نمادِ بی‌قیمت باید افتاده باشد');
+      assert.strictEqual(rows.length, 5);
+    });
+
+    t('بورس: درصد از پایانی و دیروز حساب می‌شود، نه از سرور', () => {
+      const s = rows.find(r => r.symbol === 'سرود');
+      assert.ok(Math.abs(s.changePct - 2.7300) < 0.01, String(s.changePct));
+      const g = rows.find(r => r.symbol === 'غپینو');
+      assert.ok(Math.abs(g.changePct + 1.1596) < 0.01, String(g.changePct));
+    });
+
+    t('بورس: بیشترین رشد به ترتیب درست', () => {
+      const up = Bourse.topMovers(rows, { dir: 'up', count: 3 });
+      // کرماشا +۶٫۰۱، هرمز +۵٫۷۰، سرود +۲٫۷۳
+      assert.deepStrictEqual(up.map(r => r.symbol), ['کرماشا', 'هرمز', 'سرود']);
+    });
+
+    t('بورس: بیشترین افت به ترتیب درست', () => {
+      const down = Bourse.topMovers(rows, { dir: 'down', count: 2 });
+      assert.strictEqual(down[0].symbol, 'غپینو');
+    });
+
+    // نمادی که معامله نشده درصدش صفر است و بی‌جا بالای فهرستِ افت می‌نشیند
+    t('بورس: نمادِ معامله‌نشده در فهرستِ رشد و افت نمی‌آید', () => {
+      for (const dir of ['up', 'down']) {
+        const list = Bourse.topMovers(rows, { dir, count: 10 });
+        assert.ok(!list.some(r => r.symbol === 'وساخت'), `در فهرستِ ${dir} آمد`);
+      }
+    });
+
+    // اگر فقط مرتب می‌کردیم، در بازارِ منفی نمادهای نزولی زیرِ عنوانِ «بیشترین
+    // رشد» می‌نشستند — این را در پیش‌نمایش دیدیم، نه در تست.
+    t('بورس: زیر «بیشترین رشد» نمادِ منفی نمی‌آید', () => {
+      const up = Bourse.topMovers(rows, { dir: 'up', count: 10 });
+      assert.ok(up.every(r => r.changePct > 0), up.map(r => r.symbol + ':' + r.changePct.toFixed(1)).join(' '));
+      assert.strictEqual(up.length, 3, 'فقط سه نمادِ مثبت هست، پس فهرست کوتاه‌تر می‌شود');
+      const down = Bourse.topMovers(rows, { dir: 'down', count: 10 });
+      assert.ok(down.every(r => r.changePct < 0), 'در فهرستِ افت نمادِ مثبت آمد');
+    });
+
+    t('بورس: بازارِ یکسره مثبت، فهرستِ افتِ خالی می‌دهد نه فهرستِ غلط', () => {
+      const allUp = Bourse.parseMarketWatch({ marketwatch: [
+        { lva: 'الف', lvc: 'الف', py: 100, pcl: 110, pdv: 110, qtj: 5, ztt: 2, qtc: 550, hEven: 120000 }
+      ] });
+      assert.deepStrictEqual(Bourse.topMovers(allUp, { dir: 'down' }), []);
+    });
+
+    t('بورس: پرمعامله‌ترین بر اساس ارزش', () => {
+      const act = Bourse.mostActive(rows, 2);
+      // بر اساس ارزشِ معاملات: کرماشا ۸۸۳ میلیارد، سرود ۵۶۷ میلیارد
+      assert.deepStrictEqual(act.map(r => r.symbol), ['کرماشا', 'سرود']);
+    });
+
+    t('بورس: ساعتِ آخرین معامله از خودِ داده می‌آید', () => {
+      assert.strictEqual(Bourse.hhmmOf(122948), '12:29');
+      assert.strictEqual(Bourse.hhmmOf(61057), '06:10');
+      assert.strictEqual(Bourse.hhmmOf(0), '');
+      assert.strictEqual(Bourse.hhmmOf(999999), '');
+      assert.strictEqual(Bourse.lastTradeAt(rows), '12:53');
+    });
+
+    t('بورس: شمارشِ مثبت و منفی', () => {
+      const st = Bourse.stats(rows);
+      assert.strictEqual(st.traded, 4);
+      assert.strictEqual(st.up, 3);
+      assert.strictEqual(st.down, 1);
+    });
+
+    // نامِ نماد از سرور می‌آید، نه از جدولِ محلی — پس باید مهار شود
+    t('بورس: نام از کنترل‌کاراکتر و جهت‌دهنده پاک می‌شود', () => {
+      assert.strictEqual(Bourse.cleanName('فولاد\u202eهرمزگان'), 'فولادهرمزگان');
+      assert.strictEqual(Bourse.cleanName('  سیمان   شاهرود \n'), 'سیمان شاهرود');
+      assert.strictEqual(Bourse.cleanName('x'.repeat(200)).length, Bourse.NAME_MAX);
+      assert.strictEqual(Bourse.cleanName(null), '');
+    });
+
+    t('بورس: پاسخِ خراب یا ناشناخته، فهرستِ خالی می‌دهد', () => {
+      for (const bad of ['', 'not json', '{}', '[]', null, undefined, '{"x":1}']) {
+        assert.deepStrictEqual(Bourse.parseMarketWatch(bad), []);
+      }
+    });
+
+    // نامِ کلیدِ پاسخ قبلاً عوض شده؛ اگر باز هم عوض شد نباید کارت بمیرد
+    t('بورس: اگر نامِ کلیدِ پاسخ عوض شود هم پیدا می‌شود', () => {
+      const other = Bourse.parseMarketWatch({ someNewKey: mw.marketwatch });
+      assert.strictEqual(other.length, 5);
+      assert.strictEqual(Bourse.parseMarketWatch(mw.marketwatch).length, 5, 'آرایهٔ لخت هم');
+    });
+
     // ── خلاصهٔ خبر ───────────────────────────────────────
     // description فید HTML است و آشغالِ ثابت هم دارد؛ چیزی که زیر تیتر می‌نشیند
     // باید متنِ تمیزِ کوتاه باشد، نه هرچه سایت فرستاده.

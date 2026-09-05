@@ -6020,7 +6020,8 @@
     ['focus', 'تایمر تمرکز', 'دورِ ۲۵ دقیقه‌ای روی یک کار — زمانش روی همان کار ثبت می‌شود'],
     ['beyt', 'سخن روز', 'شعر فارسی و نقل‌قولِ آدم‌های بزرگ — آفلاین، با امکان تازه‌سازی'],
     ['market', 'بازار', 'دلار، طلا و سکه — به سایت بیرونی وصل می‌شود'],
-    ['news', 'اخبار', 'فناوری، ورزشی، اقتصاد و عمومی — به سایت بیرونی وصل می‌شود']
+    ['news', 'اخبار', 'فناوری، ورزشی، اقتصاد و عمومی — به سایت بیرونی وصل می‌شود'],
+    ['bourse', 'بورس', 'بیشترین رشد و افتِ نمادها — به سایت بیرونی وصل می‌شود']
   ];
 
   // ── بازار: ارز، طلا و سکه ────────────────────────────
@@ -6220,6 +6221,95 @@
     pick.append(sel);
     card.append(pick);
     card.append(el('p', 'kiosk-note', 'به روشِ مؤسسهٔ ژئوفیزیک دانشگاه تهران، بدون ساعت تابستانی. ممکن است یکی‌دو دقیقه با تقویم محلی فرق کند.'));
+    return card;
+  }
+
+  // ── بورس ────────────────────────────────────────────
+  // دیدهٔ بازارِ TSETMC یک فایلِ بزرگ است (چند مگابایت)، پس دیر به دیر گرفته
+  // می‌شود و فقط نتیجهٔ خلاصه‌شده در حافظه می‌ماند، نه خودِ پاسخ.
+  const BOURSE_REFRESH_MS = 15 * 60 * 1000;
+  let bourseRows = [], bourseAt = 0, bourseError = '', bourseDir = 'up';
+
+  async function loadBourse() {
+    const origin = new URL(Bourse.TSETMC_URL).origin + '/*';
+    if (Store.isExt && chrome.permissions) {
+      try {
+        if (!await chrome.permissions.contains({ origins: [origin] })) {
+          bourseError = 'دسترسی به tsetmc داده نشده'; bourseRows = []; return;
+        }
+      } catch (_) { /* ادامه بده */ }
+    }
+    let r;
+    try { r = await fetch(Bourse.TSETMC_URL, { cache: 'no-store', redirect: 'follow' }); }
+    catch (_) {
+      bourseError = Store.isExt ? 'سایت پاسخ نداد (شبکه یا فیلترینگ)' : 'در پیش‌نمایش مرورگر ممکن نیست (CORS)';
+      bourseRows = []; return;
+    }
+    if (!r.ok) { bourseError = `سایت خطای ${J.faDigits(r.status)} داد`; bourseRows = []; return; }
+    let text = '';
+    try { text = await r.text(); } catch (_) { bourseError = 'پاسخ خوانده نشد'; bourseRows = []; return; }
+    const rows = Bourse.parseMarketWatch(text);
+    if (!rows.length) { bourseError = 'پاسخ خوانده شد ولی نمادی پیدا نشد (شاید ساختارش عوض شده)'; bourseRows = []; return; }
+    bourseRows = rows; bourseError = ''; bourseAt = Date.now();
+  }
+
+  function bourseRow(it) {
+    const r = el('div', 'mk-row');
+    const nm = el('span', 'mk-name');
+    // نماد پررنگ، نامِ کامل کم‌رنگ — نمادها کوتاه‌اند و چشم رویشان می‌نشیند
+    nm.append(el('b', 'bz-sym', it.symbol));
+    if (it.name && it.name !== it.symbol) nm.append(el('span', 'bz-full', it.name));
+    r.append(nm);
+    r.append(el('span', 'mk-num', Market.faPrice(it.close)));
+    // در بورس سبز یعنی رشد — برعکسِ کارت ارز، که بالا رفتنِ دلار خبرِ بدی است
+    const dir = it.changePct > 0.001 ? 'up' : it.changePct < -0.001 ? 'down' : 'flat';
+    const ch = el('span', 'bz-ch is-' + dir);
+    if (dir !== 'flat') ch.append(el('span', 'mk-arrow', dir === 'up' ? '\u25b2' : '\u25bc'));
+    ch.append(document.createTextNode(Market.faPercent(it.changePct)));
+    r.append(ch);
+    return r;
+  }
+
+  function buildBourseCard() {
+    // «آخرین بروزرسانی» گمراه‌کننده است: بازار ۱۲:۳۰ بسته و ما شاید ۱۸ گرفته‌ایم.
+    // ساعتِ آخرین معامله از خودِ داده می‌آید و همان چیزی است که معنا دارد.
+    const tradeAt = Bourse.lastTradeAt(bourseRows);
+    const card = kioskCard('بورس', tradeAt ? `آخرین معامله ${J.faDigits(tradeAt)}` : '');
+    card.classList.add('tint-blue');
+
+    if (!bourseRows.length) {
+      const why = el('div', 'kiosk-empty');
+      why.append(document.createTextNode(bourseError || 'هنوز چیزی خوانده نشده.'));
+      const grant = el('button', 'btn btn-ghost btn-sm', 'دادن دسترسی و امتحان دوباره');
+      grant.addEventListener('click', () => grantAndReload([new URL(Bourse.TSETMC_URL).origin + '/*'], async () => {
+        bourseAt = 0; await loadBourse(); renderKiosk();
+      }));
+      why.append(grant);
+      card.append(why);
+      return card;
+    }
+
+    const tabs = el('div', 'bz-tabs');
+    for (const [key, label] of [['up', 'بیشترین رشد'], ['down', 'بیشترین افت'], ['value', 'پرمعامله‌ترین']]) {
+      const b = el('button', 'bz-tab' + (bourseDir === key ? ' is-on' : ''), label);
+      b.type = 'button';
+      b.addEventListener('click', () => { bourseDir = key; renderKiosk(); });
+      tabs.append(b);
+    }
+    card.append(tabs);
+
+    const list = bourseDir === 'value' ? Bourse.mostActive(bourseRows, 6)
+                                       : Bourse.topMovers(bourseRows, { dir: bourseDir, count: 6 });
+    const box = el('div', 'mk-group');
+    for (const it of list) box.append(bourseRow(it));
+    card.append(box);
+
+    const st = Bourse.stats(bourseRows);
+    card.append(el('div', 'bz-stat',
+      `${J.faDigits(st.traded)} نماد معامله شد — ${J.faDigits(st.up)} مثبت، ${J.faDigits(st.down)} منفی`));
+
+    const note = el('p', 'kiosk-note', 'از tsetmc.com · قیمتِ پایانی، نه لحظه‌ای. این داده است، نه توصیهٔ سرمایه‌گذاری.');
+    card.append(note);
     return card;
   }
 
@@ -6667,6 +6757,10 @@
         await loadMarket();
         if ($('#view-kiosk').classList.contains('is-active')) ph.replaceWith(buildMarketCard());
       }
+    }
+    if (on.includes('bourse')) {
+      if (Date.now() - bourseAt > BOURSE_REFRESH_MS) await loadBourse();
+      grid.append(buildBourseCard());
     }
     if (on.includes('news')) {
       const placeholder = buildNewsCard(settings);
