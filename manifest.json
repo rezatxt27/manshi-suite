@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "منشی — دستیار بهره‌وری",
-  "version": "1.1.6",
+  "version": "1.2.0",
   "description": "پلتفرم بهره‌وری فارسی: صورت‌جلسهٔ هوشمند، مدیریت کارها، تقویم شمسی و گزارش — همه روی دستگاه خودتان.",
   "permissions": ["storage", "alarms", "notifications"],
   "optional_permissions": ["tabs"],
