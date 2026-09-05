@@ -583,7 +583,7 @@
     clearInterval(clockTimer); clockTimer = setInterval(drawClocks, 30000);
     if (weatherOn && Kiosk.weatherDue(weatherAt)) loadWeather(weatherCities);
   }
-  // ── اخبار فناوری ─────────────────────────────────────
+  // ── اخبار ────────────────────────────────────────────
   // تنها بخشی از منشی که به سایتِ بیرونی وصل می‌شود، پس پیش‌فرض خاموش است.
   // فقط عنوانِ خبرها از فید عمومی خوانده می‌شود — هیچ دادهٔ کاربر ارسال نمی‌شود.
   const NEWS_FEEDS = {
@@ -607,7 +607,12 @@
   // دیر یا زود از هم می‌افتند و دستهٔ تازه در یکی از دو فهرست جا می‌ماند.
   const NEWS_CATS = Kiosk.FEED_CATS;
   const NEWS_REFRESH_MS = 10 * 60 * 1000;   // فاصلهٔ گرفتن فید تازه از سایت
-  let newsItems = [], newsIdx = 0, newsTimer = null, newsLoadedAt = 0;
+  // سه ستون، نه چهار: در عرضِ کارت هر ستون حدود ۳۰۰ پیکسل می‌شود و تیترِ فارسی
+  // در آن جا می‌گیرد. با چهار ستون تیترها بد می‌شکنند و جای خلاصه نمی‌ماند.
+  const NEWS_PER_PAGE = 3;
+  // با سه خبرِ همزمان، چرخشِ ۲۰ ثانیه‌ای فقط حواس‌پرتی است
+  const NEWS_ROTATE_MS = 45000;
+  let newsItems = [], newsPage = 0, newsTimer = null, newsLoadedAt = 0;
 
   // عکسِ خبر را از هر جایی که فید گذاشته باشد بیرون می‌کشد:
   // enclosure، media:content، media:thumbnail، <image>، یا اولین <img> داخل توضیحات.
@@ -698,7 +703,7 @@
     if (!box) return;
     box.replaceChildren();
     const head = el('div', 'news-head');
-    head.append(el('span', 'news-title', 'اخبار فناوری'));
+    head.append(el('span', 'news-title', 'اخبار'));
     if (!newsItems.length) {
       box.append(head);
       const why = el('div', 'news-empty');
@@ -713,59 +718,67 @@
       box.append(why);
       return;
     }
-    const it = newsItems[newsIdx % newsItems.length];
+    const pages = Math.max(1, Math.ceil(newsItems.length / NEWS_PER_PAGE));
+    newsPage = ((newsPage % pages) + pages) % pages;
+    const shown = newsItems.slice(newsPage * NEWS_PER_PAGE, (newsPage + 1) * NEWS_PER_PAGE);
+
     const nav = el('div', 'news-nav');
     const mk = (txt, label, delta) => {
       const b = el('button', 'news-arrow', txt);
       b.title = label; b.setAttribute('aria-label', label);
-      b.addEventListener('click', () => {
-        newsIdx = (newsIdx + delta + newsItems.length) % newsItems.length;
-        paintNews();
-      });
+      b.addEventListener('click', () => { newsPage += delta; paintNews(); });
       return b;
     };
-    nav.append(mk('\u2039', 'خبر قبلی', -1));
-    nav.append(el('span', 'news-pos', `${J.faDigits(newsIdx % newsItems.length + 1)}/${J.faDigits(newsItems.length)}`));
-    nav.append(mk('\u203a', 'خبر بعدی', 1));
+    nav.append(mk('\u2039', 'خبرهای قبلی', -1));
+    // شمارهٔ صفحه، نه شمارهٔ خبر — چون سه‌تا سه‌تا ورق می‌خورد
+    nav.append(el('span', 'news-pos', `${J.faDigits(newsPage + 1)}/${J.faDigits(pages)}`));
+    nav.append(mk('\u203a', 'خبرهای بعدی', 1));
     head.append(nav);
     box.append(head);
 
-    // تیتر روی عکس می‌نشیند، پس خودِ قاب لینک است — نه فقط متن.
-    const hero = el('a', 'news-hero');
-    hero.href = it.link; hero.target = '_blank'; hero.rel = 'noopener noreferrer';
+    const grid = el('div', 'news-grid');
+    for (const it of shown) grid.append(buildNewsTile(it));
+    box.append(grid);
 
-    // نشانِ منبع پشتِ عکس می‌ماند: اگر عکسی نبود یا نیامد، جای خالی دیده نشود.
-    hero.append(el('span', 'news-hero-mark', it.source));
+    // عکس‌های صفحهٔ بعد از قبل گرفته می‌شوند تا ورق‌زدن پرش نداشته باشد
+    const nextStart = ((newsPage + 1) % pages) * NEWS_PER_PAGE;
+    for (const it of newsItems.slice(nextStart, nextStart + NEWS_PER_PAGE)) {
+      if (it?.image) { const pre = new Image(); pre.referrerPolicy = 'no-referrer'; pre.src = it.image; }
+    }
+  }
 
+  function buildNewsTile(it) {
+    // کلِ کاشی لینک است، نه فقط تیتر — هدفِ کلیکِ بزرگ‌تر
+    const a = el('a', 'news-item');
+    a.href = it.link; a.target = '_blank'; a.rel = 'noopener noreferrer';
+
+    const thumb = el('span', 'news-thumb');
+    // نامِ منبع پشتِ عکس می‌ماند: اگر عکسی نبود یا نیامد، قابِ خالی دیده نشود
+    thumb.append(el('span', 'news-thumb-mark', it.source));
     if (it.image) {
-      const img = el('img', 'news-hero-img');
-      // referrerpolicy: سایتِ میزبانِ عکس نباید بفهمد از کجا آمده‌ای.
+      const img = el('img', 'news-thumb-img');
+      // referrerpolicy: سایتِ میزبانِ عکس نباید بفهمد از کجا آمده‌ای
       img.referrerPolicy = 'no-referrer';
       img.loading = 'lazy';
       img.decoding = 'async';
-      img.alt = '';                       // تزئینی است؛ تیتر خودش متن دارد
-      // فیدها پر از عکسِ مرده‌اند؛ قابِ خالی بدتر از نبودِ عکس است
-      img.addEventListener('error', () => { img.remove(); hero.classList.add('is-blank'); });
+      img.alt = '';                        // تزئینی است؛ تیتر خودش متن دارد
+      img.addEventListener('error', () => img.remove());
       img.src = it.image;
-      hero.append(img);
-    } else hero.classList.add('is-blank');
+      thumb.append(img);
+    }
+    a.append(thumb);
 
-    hero.append(el('span', 'news-hero-scrim'));
-    hero.append(el('span', 'news-hero-title', it.title));
-    box.append(hero);
+    // در ستونِ باریک تیتر زیرِ عکس می‌آید، نه رویش: روی عکسِ کوچک خوانا نیست
+    a.append(el('span', 'news-item-title', it.title));
 
-    const foot = el('div', 'news-foot');
-    if (it.cat) foot.append(el('span', 'news-cat', it.cat));
-    foot.append(el('span', 'news-source', it.source));
-    if (it.at) foot.append(el('span', 'news-time', J.relLabel(J.iso(new Date(it.at)))));
-    box.append(foot);
+    const meta = el('span', 'news-item-meta');
+    if (it.cat) meta.append(el('span', 'news-cat', it.cat));
+    meta.append(el('span', 'news-source', it.source));
+    if (it.at) meta.append(el('span', 'news-time', J.relLabel(J.iso(new Date(it.at)))));
+    a.append(meta);
 
-    // خلاصه اختیاری است: خیلی از فیدها ندارند، و بلوکِ خالی بدتر از نبودش است
-    if (it.summary) box.append(el('p', 'news-desc', it.summary));
-
-    // عکسِ خبرِ بعدی از قبل گرفته می‌شود تا چرخشِ هر ۲۰ ثانیه پرش نداشته باشد
-    const next = newsItems[(newsIdx + 1) % newsItems.length];
-    if (next?.image) { const pre = new Image(); pre.referrerPolicy = 'no-referrer'; pre.src = next.image; }
+    if (it.summary) a.append(el('span', 'news-item-desc', it.summary));
+    return a;
   }
 
   async function renderNews(settings) {
@@ -776,12 +789,12 @@
     box.hidden = false;
     // فید هر ۱۰ دقیقه تازه می‌شود؛ تیتر هر ۲۰ ثانیه عوض می‌شود
     if (!newsItems.length || Date.now() - newsLoadedAt > NEWS_REFRESH_MS) await loadNews(settings.newsSources);
-    newsIdx = 0; paintNews();
+    newsPage = 0; paintNews();
     newsTimer = setInterval(() => {
       if (!newsItems.length) return;
-      newsIdx = (newsIdx + 1) % newsItems.length;
+      newsPage += 1;
       paintNews();
-    }, 20000);
+    }, NEWS_ROTATE_MS);
   }
 
   // ── فرمِ سربرگ: شهرهای ساعت + کارت اخبار ──
