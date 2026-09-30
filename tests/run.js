@@ -357,6 +357,16 @@ console.log('\n— امنیت —');
     assert.strictEqual(evs.length, 1);
     assert.ok(!evs[0].meet || /^https:\/\//.test(evs[0].meet), 'لینک جلسه فقط https');
   });
+
+  // آدرس تقویم مثل رمز عبور رفتار می‌شود؛ روی http رمزنگاری‌نشده می‌رود — باید رد شود
+  t('امنیت: ICS.isSecureUrl فقط https را می‌پذیرد', () => {
+    assert.strictEqual(ICSm.isSecureUrl('https://calendar.google.com/x.ics'), true);
+    assert.strictEqual(ICSm.isSecureUrl('http://calendar.google.com/x.ics'), false);
+    assert.strictEqual(ICSm.isSecureUrl('http://localhost/x.ics'), false); // برخلاف baseUrl هوش مصنوعی، اینجا استثنا ندارد
+    assert.strictEqual(ICSm.isSecureUrl('ftp://x.com'), false);
+    assert.strictEqual(ICSm.isSecureUrl('not-a-url'), false);
+    assert.strictEqual(ICSm.isSecureUrl(''), false);
+  });
 }
 
 console.log('\n— store: آدم‌ها و پشتیبان‌گیری —');
@@ -464,6 +474,14 @@ t('peopleFiles گروه‌بندی درست', () => {
 });
 
 (async () => {
+  // آدرس تقویمِ غیرِ https نباید حتی یک درخواستِ شبکه بزند
+  {
+    let rejected = false;
+    try { await ICS.refresh('http://calendar.example.com/x.ics'); }
+    catch (e) { rejected = true; }
+    t('امنیت: ICS.refresh با آدرس http رد می‌شود', () => assert.ok(rejected));
+  }
+
   // toggleDone روی کار تکرارشونده، رخداد بعدی می‌سازد
   Object.keys(mem).forEach(k => delete mem[k]);
   const rec = await Store.addTask({ title: 'گزارش هفتگی', due: '2026-07-25', recur: { freq: 'weekly', interval: 1, weekday: 0 } });
@@ -694,6 +712,18 @@ t('peopleFiles گروه‌بندی درست', () => {
   let rejected = false;
   await Store.importData({ bogus: true }).catch(() => { rejected = true; });
   t('import فایل نامعتبر خطا می‌دهد', () => assert.ok(rejected));
+
+  // import نباید icsUrlِ http را از فایل پشتیبان بپذیرد — مثل رمز عبور روی http
+  Object.keys(mem).forEach(k => delete mem[k]);
+  await Store.saveSettings({ icsUrl: 'https://calendar.google.com/keep-me.ics' });
+  await Store.importData({ app: 'manshi', tasks: [], settings: { icsUrl: 'http://evil.example.com/x.ics' } }, { replace: false });
+  const afterIcs = await Store.getSettings();
+  t('import: icsUrl غیرِ https نادیده گرفته می‌شود و مقدار فعلی می‌ماند', () =>
+    assert.strictEqual(afterIcs.icsUrl, 'https://calendar.google.com/keep-me.ics'));
+  await Store.importData({ app: 'manshi', tasks: [], settings: { icsUrl: 'https://new-calendar.example.com/x.ics' } }, { replace: false });
+  const afterIcs2 = await Store.getSettings();
+  t('import: icsUrlِ https معتبر جایگزین می‌شود', () =>
+    assert.strictEqual(afterIcs2.icsUrl, 'https://new-calendar.example.com/x.ics'));
 
   // ---------- چند اتصال هوش مصنوعی ----------
   console.log('\n— AI: چند اتصال —');

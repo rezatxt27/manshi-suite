@@ -5243,8 +5243,9 @@
   }
   $('#saveIcs').addEventListener('click', async () => {
     const url = $('#setIcs').value.trim();
+    if (!url) { await Store.saveSettings({ icsUrl: url }); flash('#icsStatus', 'پاک شد'); return; }
+    if (!ICS.isSecureUrl(url)) { flash('#icsStatus', 'آدرس تقویم باید https باشد', false); return; }
     await Store.saveSettings({ icsUrl: url });
-    if (!url) { flash('#icsStatus', 'پاک شد'); return; }
     if (Store.isExt && chrome.permissions) {
       try {
         const origin = new URL(url).origin + '/*';

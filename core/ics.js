@@ -184,8 +184,18 @@ const ICS = (() => {
     return Math.floor(start.getTime() / (7 * 86400000));
   }
 
+  // آدرس تقویم مثل رمز عبور رفتار می‌شود (core/store.js: SECRET_KEYS)؛ روی http
+  // بدون رمزنگاری می‌رود. برخلاف baseUrlِ هوش مصنوعی، اینجا استثنای localhost
+  // معنی ندارد — تقویم محلی موردی نیست که پشتیبانی کنیم.
+  function isSecureUrl(url) {
+    let u;
+    try { u = new URL(String(url || '').trim()); } catch (_) { return false; }
+    return u.protocol === 'https:';
+  }
+
   // دریافت و کش؛ پنجرهٔ ۱۴ روزه از دیروز
   async function refresh(icsUrl) {
+    if (!isSecureUrl(icsUrl)) throw new Error('آدرس تقویم باید https باشد');
     const from = new Date(); from.setDate(from.getDate() - 1); from.setHours(0, 0, 0, 0);
     const to = new Date(); to.setDate(to.getDate() + 14);
     const res = await fetch(icsUrl, { cache: 'no-store' });
@@ -195,7 +205,7 @@ const ICS = (() => {
     return parse(text, from, to);
   }
 
-  return { parse, refresh };
+  return { parse, refresh, isSecureUrl };
 })();
 
 if (typeof module !== 'undefined') module.exports = ICS;

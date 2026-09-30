@@ -1,8 +1,9 @@
 // وردست — Service Worker: زنگ‌های روزانه، نوار آدرس، به‌روزرسانی تقویم و پل امن منشی
-// search.js باید پیش از store.js بیاید: store برای یکسان‌سازیِ نامِ آدم‌ها از
-// MeetSearch.norm استفاده می‌کند. اگر نباشد، سرویس‌ورکر همان خط می‌میرد و
-// کلیکِ روی آیکون هیچ کاری نمی‌کند — بی‌آنکه خطایی به چشمِ کاربر بیاید.
-importScripts('core/jalali.js', 'core/date-parser.js', 'core/ai-client.js', 'core/transcript-cleaner.js', 'core/mom-core.js', 'core/search.js', 'core/store.js', 'core/ics.js');
+// search.js و ics.js باید پیش از store.js بیایند: store برای یکسان‌سازیِ نامِ
+// آدم‌ها از MeetSearch.norm و برای اعتبارسنجیِ https-only از ICS.isSecureUrl
+// استفاده می‌کند. اگر نباشند، سرویس‌ورکر همان خط می‌میرد و کلیکِ روی آیکون
+// هیچ کاری نمی‌کند — بی‌آنکه خطایی به چشمِ کاربر بیاید.
+importScripts('core/jalali.js', 'core/date-parser.js', 'core/ai-client.js', 'core/transcript-cleaner.js', 'core/mom-core.js', 'core/search.js', 'core/ics.js', 'core/store.js');
 
 const ALARMS = { MORNING: 'vd-morning', EVENING: 'vd-evening', ICS: 'vd-ics', FINISH: 'vd-finish' };
 

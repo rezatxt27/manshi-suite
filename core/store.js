@@ -4,6 +4,7 @@ const Store = (() => {
   const J = typeof Jalali !== 'undefined' ? Jalali : require('./jalali.js');
   const DP = typeof DateParser !== 'undefined' ? DateParser : require('./date-parser.js');
   const SRCH = typeof MeetSearch !== 'undefined' ? MeetSearch : require('./search.js');
+  const ICSMod = typeof ICS !== 'undefined' ? ICS : require('./ics.js');
   const isExt = typeof chrome !== 'undefined' && !!(chrome.storage && chrome.storage.local);
   const newId = () => 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const SECRET_KEYS = ['icsUrl', 'aiKey'];
@@ -1386,6 +1387,9 @@ const Store = (() => {
       const cur = await getSettings();
       const patch = { ...obj.settings };
       for (const k of SECRET_KEYS) if (!patch[k]) delete patch[k]; // مقدار حساسِ فعلی حفظ می‌شود
+      // آدرس تقویمِ غیرِhttps از فایل پشتیبان وارد نمی‌شود — مثل رمز عبور که روی
+      // http رمزنگاری‌نشده می‌رود؛ مقدار فعلی (اگر باشد) دست‌نخورده می‌ماند
+      if (typeof patch.icsUrl === 'string' && patch.icsUrl && !ICSMod.isSecureUrl(patch.icsUrl)) delete patch.icsUrl;
       // پروفایل‌های AI: کلیدِ خالیِ واردشده، کلید فعلیِ همان پروفایل را پاک نکند
       if (Array.isArray(patch.aiProfiles)) {
         const curById = new Map((cur.aiProfiles || []).map(p => [p.id, p]));
