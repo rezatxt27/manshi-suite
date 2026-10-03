@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/images/hero.png" alt="منشی — دستیار بهره‌وری فارسی برای کروم: صورت‌جلسه، کارها و برنامهٔ روز، بدون سرور" width="100%">
+</p>
+
 # منشی — دستیار بهره‌وری
 
 اکستنشن فارسی و راست‌به‌چپ کروم برای جلسه‌ها، کارها و برنامهٔ روز.
@@ -23,6 +27,71 @@
 | **گزارش** | آمار هفتگی و گزارش متنی |
 | **کیوسک** | تقویم و مناسبت‌ها، اوقات شرعی، سخن روز، بازار، بورس، صندوق‌ها، اخبار، تایمر تمرکز |
 | **بپرس از AI** | کارهای آماده با سؤالِ ازپیش‌نوشته برای چسباندن در هر چت‌باتی، و پلِ دوطرفهٔ MCP |
+
+<p align="center">
+  <img src="docs/images/how-it-works.png" alt="منشی چطور کار می‌کند: زیرنویس Google Meet، صورت‌جلسهٔ هوشمند با کلید خودتان، کارها و پروژه‌ها، امروز و هفته — همه روی دستگاه خودتان" width="100%">
+</p>
+
+---
+
+## نمایی از منشی
+
+> همهٔ تصاویر با **دادهٔ نمونه و ساختگی** گرفته شده‌اند. تصویرها با پوستهٔ تیره یا روشنِ گیت‌هابِ شما هماهنگ می‌شوند.
+
+**امروز** — خلاصهٔ روز، جلسهٔ بعدی، سرِنخ‌های باز از جلسه‌های اخیر و تمرکز امروز
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/screens/today-light.png">
+  <img src="docs/images/screens/today-dark.png" alt="صفحهٔ امروز در منشی">
+</picture>
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <b>صورت‌جلسهٔ هوشمند</b><br>
+      <sub>از زیرنویس Google Meet، با قالب، اقدام‌ها و بازبینی شواهد</sub><br><br>
+      <picture>
+        <source media="(prefers-color-scheme: light)" srcset="docs/images/screens/meeting-light.png">
+        <img src="docs/images/screens/meeting-dark.png" alt="صورت‌جلسهٔ هوشمند در منشی">
+      </picture>
+    </td>
+    <td width="50%" valign="top">
+      <b>کارها — کانبان</b><br>
+      <sub>اولویت، زیرکار، تکرارشونده و اتصال به پروژه</sub><br><br>
+      <picture>
+        <source media="(prefers-color-scheme: light)" srcset="docs/images/screens/tasks-board-light.png">
+        <img src="docs/images/screens/tasks-board-dark.png" alt="برد کانبان کارها در منشی">
+      </picture>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <b>پروندهٔ پروژه</b><br>
+      <sub>هدف، دفترچه، کارِ بعدی، جلسه‌ها و آدم‌های پروژه در یک جا</sub><br><br>
+      <picture>
+        <source media="(prefers-color-scheme: light)" srcset="docs/images/screens/project-light.png">
+        <img src="docs/images/screens/project-dark.png" alt="پروندهٔ پروژه در منشی">
+      </picture>
+    </td>
+    <td width="50%" valign="top">
+      <b>نمای هفته</b><br>
+      <sub>تقویم شمسی با جلسه‌ها و سررسیدها؛ کار را روی روز بکش</sub><br><br>
+      <picture>
+        <source media="(prefers-color-scheme: light)" srcset="docs/images/screens/week-light.png">
+        <img src="docs/images/screens/week-dark.png" alt="نمای هفتگی تقویم شمسی در منشی">
+      </picture>
+    </td>
+  </tr>
+</table>
+
+<details>
+<summary><b>کیوسک</b> — تقویم و مناسبت‌ها، سخن روز، بازار و تایمر تمرکز</summary>
+<br>
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/screens/kiosk-light.png">
+  <img src="docs/images/screens/kiosk-dark.png" alt="صفحهٔ کیوسک در منشی">
+</picture>
+</details>
 
 ---
 

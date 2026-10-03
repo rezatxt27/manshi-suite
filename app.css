@@ -1727,9 +1727,11 @@ h4.mom-h { font-size: 14px; color: var(--text-2); }
 .proj-dot.proj-rose, .proj-dot.proj-violet, .proj-dot.proj-slate { background: var(--proj); }
 .proj-dot.proj-empty { background: transparent; border: 1.5px solid var(--border); }
 
-.chip-proj { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border: 0; font: inherit; }
+/* دکمه است، پس بدونِ پس‌زمینهٔ صریح، رنگِ پیش‌فرضِ دکمهٔ مرورگر (سفید) را می‌گرفت */
+.chip-proj { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font: inherit;
+  background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border-soft); }
 .chip-proj .proj-dot { background: var(--proj, var(--text-3)); }
-.chip-proj:hover { background: var(--surface-2); }
+.chip-proj:hover { color: var(--text); border-color: var(--proj, var(--border)); }
 
 .proj-pop { min-width: 230px; }
 .proj-list { display: grid; gap: 2px; max-height: 240px; overflow-y: auto; margin-bottom: 8px; }
