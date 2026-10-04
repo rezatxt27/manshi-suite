@@ -12,6 +12,11 @@
 
 [![تست و ریلیز](https://github.com/rezatxt27/manshi-suite/actions/workflows/release.yml/badge.svg)](https://github.com/rezatxt27/manshi-suite/actions/workflows/release.yml)
 
+<p align="center">
+  <a href="docs/media/manshi-promo.mp4"><img src="docs/images/promo-poster.png" alt="ویدیوی معرفی منشی — ۴۰ ثانیه" width="100%"></a>
+  <br><sub>▶ ویدیوی معرفی منشی (۴۰ ثانیه، با صدا) · موسیقیِ ویدیوها برای همین پروژه ساخته شده است</sub>
+</p>
+
 ---
 
 ## چه می‌کند
