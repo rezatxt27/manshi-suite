@@ -58,7 +58,19 @@ const Updater = (() => {
 
   const dueForCheck = (lastAt, now = Date.now()) => !lastAt || (now - lastAt) >= CHECK_EVERY_MS;
 
-  const api = { REPO, API, PAGE, CHECK_EVERY_MS, parseVersion, compareVersions, isNewer, parseRelease, dueForCheck };
+  // ── «اعمال» برای نصبِ گیتی ────────────────────────────
+  // اگر منشی با کلونِ گیت نصب شده باشد و اسکریپتِ شبانه `git pull` زده باشد،
+  // فایل‌های روی دیسک تازه‌اند ولی کروم همان نسخهٔ قبلی را بار کرده. سه حالت:
+  //   ready   — دیسک جلوتر از چیزی است که بار شده؛ یک بارِ دوباره کافی است
+  //   waiting — نسخهٔ تازه منتشر شده ولی هنوز روی دیسک نیامده (دانلودِ دستی)
+  //   current — همین که بار شده تازه‌ترین است
+  function applyState({ loaded = '', disk = '', remote = '' } = {}) {
+    if (loaded && disk && compareVersions(disk, loaded) > 0) return 'ready';
+    if (loaded && remote && compareVersions(remote, loaded) > 0) return 'waiting';
+    return 'current';
+  }
+
+  const api = { REPO, API, PAGE, CHECK_EVERY_MS, parseVersion, compareVersions, isNewer, parseRelease, dueForCheck, applyState };
   if (typeof globalThis !== 'undefined') globalThis.Updater = api;
   return api;
 })();

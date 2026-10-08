@@ -6268,6 +6268,7 @@
     }).filter(Boolean);
     renderNews(settings);
     checkUpdateQuietly();
+    paintApplyRow();
   }
 
   // ---------- کیوسک ----------
@@ -7298,11 +7299,62 @@
     return currentVersion;
   }
 
+  // نسخهٔ روی دیسک. اگر منشی با کلونِ گیت نصب شده باشد و اسکریپتِ
+  // `tools/manshi-pull.sh` شبانه `git pull` زده باشد، فایل‌های روی دیسک
+  // تازه‌اند ولی کروم همان نسخهٔ قبلی را بار کرده. کروم منابعِ افزونهٔ unpacked
+  // را از دیسک می‌خواند، پس این عدد نسخهٔ واقعیِ روی دیسک است. اگر روزی از کش
+  // بدهد، فقط حالتِ «اعمال» دیده نمی‌شود — چیزی خراب نمی‌شود.
+  async function diskVersion() {
+    try {
+      const v = (await (await fetch('manifest.json', { cache: 'no-store' })).json())?.version;
+      return typeof v === 'string' ? v : '';
+    } catch (_) { return ''; }
+  }
+
+  // بارِ دوبارهٔ افزونه، که همین صفحه را هم می‌بندد. پس پیش از رفتن نشانه‌ای
+  // می‌گذاریم تا سرویس‌ورکر بعد از بالا آمدن منشی را دوباره باز کند.
+  //
+  // عمداً تأیید می‌گیریم: بارِ دوباره، content script روی Meet را یتیم می‌کند و
+  // ثبتِ در جریان قطع می‌شود. این تصمیم باید دستِ کاربر باشد، نه خودکار.
+  async function applyUpdateNow() {
+    if (!Store.isExt || !chrome.runtime?.reload) return false;
+    const ok = confirm('منشی از نو بار می‌شود تا نسخهٔ تازه اعمال شود.\n\nاگر جلسه‌ای در حال ثبت است، اول ثبت را متوقف کن — بارِ دوباره آن را قطع می‌کند.');
+    if (!ok) return false;
+    try { await chrome.storage.local.set({ reopenAppAt: Date.now() }); } catch (_) {}
+    chrome.runtime.reload();
+    return true;
+  }
+
   async function paintUpdateBanner(rel, settings) {
     const box = $('#updateBanner');
     if (!box) return;
     const cur = await appVersion();
     if (!cur) { box.hidden = true; return; }   // تا نسخهٔ خودمان معلوم نشده، چیزی ادعا نکن
+    const disk = await diskVersion();
+    const state = Updater.applyState({ loaded: cur, disk, remote: rel?.version || '' });
+
+    // دیسک جلوتر است: این حالت بر خبرِ انتشار مقدم است، چون با یک کلیک تمام
+    // می‌شود و نیازی به رفتن به گیت‌هاب ندارد.
+    if (state === 'ready' && settings?.applySeen !== disk) {
+      box.hidden = false;
+      box.replaceChildren();
+      const body = el('div', 'update-body');
+      body.append(el('strong', null, `نسخهٔ ${J.faDigits(disk)} روی دیسک آماده است`));
+      body.append(el('span', null, `نسخهٔ بارشده ${J.faDigits(cur)} است — با یک بارِ دوباره اعمال می‌شود.`));
+      box.append(body);
+      const acts = el('div', 'update-acts');
+      const apply = el('button', 'btn btn-primary btn-sm', 'اعمال کن');
+      apply.addEventListener('click', applyUpdateNow);
+      const later = el('button', 'btn btn-ghost btn-sm', 'بعداً');
+      later.addEventListener('click', async () => {
+        await Store.saveSettings({ applySeen: disk });
+        box.hidden = true;
+      });
+      acts.append(apply, later);
+      box.append(acts);
+      return;
+    }
+
     if (!rel || !Updater.isNewer(rel.version, cur) || settings?.updateSeen === rel.version) {
       box.hidden = true; return;
     }
@@ -7324,10 +7376,26 @@
     box.append(acts);
   }
 
+  // دکمهٔ «اعمال» در ردیفِ نسخه در تنظیمات. فقط وقتی دیده می‌شود که واقعاً
+  // چیزی روی دیسک منتظرِ اعمال باشد — دکمه‌ای که همیشه هست و معلوم نیست چه
+  // می‌کند، بدتر از نبودنش است.
+  async function paintApplyRow() {
+    const btn = $('#applyUpdate');
+    if (!btn) return;
+    const [loaded, disk] = [await appVersion(), await diskVersion()];
+    const ready = Updater.applyState({ loaded, disk }) === 'ready';
+    btn.hidden = !ready;
+    if (ready) btn.textContent = `اعمال نسخهٔ ${J.faDigits(disk)}`;
+  }
+
+  $('#applyUpdate')?.addEventListener('click', applyUpdateNow);
+
   // یک بار در روز، بی‌سروصدا؛ خطایش هیچ‌جا دیده نمی‌شود
   async function checkUpdateQuietly() {
     const s = await Store.getSettings();
-    if (!s.updateCheckOn) { $('#updateBanner').hidden = true; return; }
+    // خاموش‌بودنِ «خبرم کن» یعنی سراغِ گیت‌هاب نرو. ولی نسخه‌ای که از قبل روی
+    // دیسک نشسته هیچ درخواستی لازم ندارد، پس آن را باز هم نشان می‌دهیم.
+    if (!s.updateCheckOn) { await paintUpdateBanner(null, s); return; }
     if (!Updater.dueForCheck(s.updateCheckedAt)) { await paintUpdateBanner(s.lastRelease, s); return; }
     const { rel } = await fetchRelease();
     await Store.saveSettings({ updateCheckedAt: Date.now(), ...(rel ? { lastRelease: rel } : {}) });
@@ -7371,10 +7439,16 @@
     if (error) { updateSay(error, 'err'); return; }
     const cur = await appVersion();
     await Store.saveSettings({ updateCheckedAt: Date.now(), lastRelease: rel, updateSeen: '' });
-    if (Updater.isNewer(rel.version, cur)) {
+    const disk = await diskVersion();
+    if (Updater.applyState({ loaded: cur, disk }) === 'ready') {
+      // نسخه از قبل گرفته شده و فقط بارِ دوباره مانده — همین را بگو، نه «برو بگیر»
+      updateSay(`نسخهٔ ${J.faDigits(disk)} روی دیسک آماده است — اعمالش کن`, 'ok');
+      await paintUpdateBanner(rel, { updateSeen: '', applySeen: '' });
+    } else if (Updater.isNewer(rel.version, cur)) {
       updateSay(`نسخهٔ ${J.faDigits(rel.version)} هست — بالای صفحهٔ «امروز» ببین`, 'ok');
       await paintUpdateBanner(rel, { updateSeen: '' });
     } else updateSay('همین نسخه تازه‌ترین است ✓', 'ok');
+    paintApplyRow();
   }
 
   $('#checkUpdate')?.addEventListener('click', runUpdateCheck);

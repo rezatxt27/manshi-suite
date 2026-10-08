@@ -52,6 +52,21 @@ async function finishAbandonedAnalysis() {
 chrome.runtime.onInstalled.addListener(setupAlarms);
 chrome.runtime.onStartup.addListener(setupAlarms);
 
+// «اعمال نسخهٔ تازه» افزونه را از نو بار می‌کند و همین کار تبِ اپ را هم می‌بندد.
+// پیش از رفتن، صفحه یک نشانهٔ زمان‌دار می‌گذارد و اینجا دوباره بازش می‌کنیم.
+// نشانه عمداً عمرِ کوتاه دارد: اگر سرویس‌ورکر دیرتر — مثلاً فردا — بالا بیاید،
+// نباید بی‌دلیل یک تب باز کند.
+const REOPEN_WINDOW_MS = 120000;
+(async () => {
+  try {
+    const { reopenAppAt = 0 } = await chrome.storage.local.get('reopenAppAt');
+    if (!reopenAppAt) return;
+    await chrome.storage.local.remove('reopenAppAt');
+    if (Date.now() - reopenAppAt > REOPEN_WINDOW_MS) return;
+    chrome.tabs.create({ url: chrome.runtime.getURL('app.html') });
+  } catch (_) { /* بازنشدنِ تب نباید سرویس‌ورکر را زمین بزند */ }
+})();
+
 function notify(id, title, message) {
   chrome.notifications.create(id, {
     type: 'basic',

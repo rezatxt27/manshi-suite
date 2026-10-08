@@ -2578,6 +2578,27 @@ t('peopleFiles گروه‌بندی درست', () => {
       assert.ok(U.API.startsWith('https://api.github.com/'));
       assert.ok(U.PAGE.startsWith('https://github.com/'));
     });
+
+    // ── حالتِ «اعمال» (نصبِ گیتی) ──
+    t('اعمال: دیسک جلوتر از بارشده → آماده', () =>
+      assert.strictEqual(U.applyState({ loaded: '1.6.0', disk: '1.7.0' }), 'ready'));
+    t('اعمال: دیسک جلوتر است، حتی اگر انتشار هم تازه‌تر باشد', () =>
+      assert.strictEqual(U.applyState({ loaded: '1.6.0', disk: '1.7.0', remote: '1.7.0' }), 'ready'));
+    t('اعمال: منتشر شده ولی روی دیسک نیامده → منتظر', () =>
+      assert.strictEqual(U.applyState({ loaded: '1.6.0', disk: '1.6.0', remote: '1.7.0' }), 'waiting'));
+    t('اعمال: همه‌جا یکی → همین تازه‌ترین است', () => {
+      assert.strictEqual(U.applyState({ loaded: '1.6.0', disk: '1.6.0', remote: '1.6.0' }), 'current');
+      assert.strictEqual(U.applyState({ loaded: '1.6.0' }), 'current');
+    });
+    // اگر دیسک خوانده نشود (کش یا خطا) نباید دکمهٔ «اعمال» الکی ظاهر شود
+    t('اعمال: نسخهٔ دیسکِ ناخوانده ادعایی نمی‌سازد', () => {
+      assert.strictEqual(U.applyState({ loaded: '1.6.0', disk: '' }), 'current');
+      assert.strictEqual(U.applyState({ loaded: '', disk: '1.7.0' }), 'current');
+      assert.strictEqual(U.applyState({}), 'current');
+    });
+    // دیسکِ عقب‌تر یعنی کاربر دستی برگشته — بارِ دوباره کارش را خراب می‌کند
+    t('اعمال: دیسکِ عقب‌تر «آماده» نیست', () =>
+      assert.strictEqual(U.applyState({ loaded: '1.7.0', disk: '1.6.0' }), 'current'));
   }
 
   // ── عکسِ لحظه‌ای و زمینهٔ کلیپ‌بورد ──────────────────

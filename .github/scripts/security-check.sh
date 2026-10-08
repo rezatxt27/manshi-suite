@@ -99,7 +99,9 @@ if [ -f "$SNAP" ] && command -v node >/dev/null 2>&1; then
   names=$(node -e '
     const fs=require("fs");
     let d; try { d=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); } catch(e){ process.exit(0); }
-    const skip=/^(you|شما|گوینده|speaker|unknown|ناشناس)/i;
+    // «مشخص نشد» و مانندش نامِ آدم نیست — جاگذارِ خودِ منشی است که در دادهٔ
+    // محلی به‌عنوان نامِ حاضر نشسته و بی‌جا هشدار می‌داد
+    const skip=/^(you|شما|گوینده|speaker|unknown|ناشناس|نامشخص|مشخص نشد)/i;
     const out=new Set();
     for (const m of d.meetings||[]) for (const p of m.participants||[]) {
       const n=String((p&&p.name)||p||"").trim();
