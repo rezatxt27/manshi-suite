@@ -18,11 +18,19 @@
 #   • فقط fast-forward؛ هیچ مرج و هیچ ریبیسی، تا تاریخچه دست‌نخورده بماند.
 set -u
 
-PATH=/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin
+# زمان‌بندها (launchd و مانندش) PATH کمینه می‌دهند و git پیدا نمی‌شود. به‌جای
+# جایگزینیِ PATH، مسیرهای رایج به آنچه هست اضافه می‌شود — وگرنه روی ویندوز و
+# لینوکس که git جای دیگری است، اسکریپت از کار می‌افتد.
+PATH="$PATH:/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"
 export PATH
 
 REPO=$(cd "$(dirname "$0")/.." 2>/dev/null && pwd) || exit 0
-LOG="$HOME/Library/Logs/manshi-pull.log"
+# مک پوشهٔ لاگِ خودش را دارد؛ ویندوز و لینوکس ندارند
+if [ -d "$HOME/Library/Logs" ]; then
+  LOG="$HOME/Library/Logs/manshi-pull.log"
+else
+  LOG="$HOME/.manshi-pull.log"
+fi
 mkdir -p "$(dirname "$LOG")" 2>/dev/null
 
 say() { printf '%s  %s\n' "$(date '+%Y-%m-%d %H:%M')" "$1" >> "$LOG"; }
@@ -37,9 +45,23 @@ MAX_AGE=600
 
 if [ "${1:-}" = "--if-requested" ]; then
   [ -f "$FLAG" ] || exit 0
-  age=$(( $(date +%s) - $(stat -f %m "$FLAG" 2>/dev/null || echo 0) ))
+  # زمانِ فایل: BSD و GNU پرچمِ متفاوت دارند و `stat -f` روی GNU معنیِ دیگری
+  # می‌دهد (نه خطا)، پس بر اساس سیستم انتخاب می‌شود نه با آزمون‌وخطا.
+  case "$(uname -s 2>/dev/null)" in
+    Darwin|*BSD*) mtime=$(stat -f %m "$FLAG" 2>/dev/null) ;;
+    *)            mtime=$(stat -c %Y "$FLAG" 2>/dev/null) ;;
+  esac
   rm -f "$FLAG"
-  if [ "$age" -gt "$MAX_AGE" ]; then say "درخواستِ کهنه ($age ثانیه) — رد شد"; exit 0; fi
+  case "${mtime:-x}" in
+    ''|*[!0-9]*) mtime='' ;;                    # خوانده نشد
+  esac
+  if [ -n "$mtime" ]; then
+    age=$(( $(date +%s) - mtime ))
+    if [ "$age" -gt "$MAX_AGE" ]; then say "درخواستِ کهنه ($age ثانیه) — رد شد"; exit 0; fi
+  else
+    # نشد بفهمیم کی زده شده؛ بودنِ پرچم یعنی خواسته‌ای — به‌خاطرِ ندانستن ردش نمی‌کنیم
+    say "زمانِ درخواست خوانده نشد — تازه فرض شد"
+  fi
   say "درخواستِ «گرفتن و اعمال» دیده شد"
 fi
 

@@ -68,7 +68,8 @@
   <div class="rail-foot">
     <button class="rail-item" data-view="settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M19.6 14.6a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.3 1.03z"/></svg>
-      <span>تنظیمات</span>
+      <span>تنظیمات و به‌روزرسانی</span>
+      <span class="rail-dot" id="updateDot" hidden aria-label="به‌روزرسانی نیاز به توجه دارد"></span>
     </button>
     <button id="themeToggle" class="rail-item" aria-label="تغییر پوسته" title="پوستهٔ روشن/تیره">
       <svg class="ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M4.2 12H2M22 12h-2.2M6.3 6.3 4.8 4.8M19.2 19.2l-1.5-1.5M17.7 6.3l1.5-1.5M4.8 19.2l1.5-1.5"/></svg>
@@ -451,8 +452,26 @@
 
 <!-- ═══════════ تنظیمات ═══════════ -->
 <section id="view-settings" class="view">
-  <h1>تنظیمات</h1>
+  <h1>تنظیمات و به‌روزرسانی</h1>
   <div class="settings-grid">
+    <h2 class="set-group">به‌روزرسانی</h2>
+
+<details class="set-acc" id="updateAcc">
+      <summary class="set-summary">نسخه و به‌روزرسانی</summary>
+      <p class="set-version">نسخهٔ فعلی: <span id="appVersion">—</span>
+        <button type="button" class="btn-link" id="checkUpdate">بررسی نسخهٔ تازه</button>
+        <button type="button" class="btn-link" id="applyUpdate" hidden>اعمال نسخهٔ تازه</button>
+      </p>
+      <div class="field-status" id="updateStatus"></div>
+      <label class="field-check">
+        <input type="checkbox" id="setUpdateCheck">
+        <span>خبرم کن اگر نسخهٔ تازه‌ای منتشر شد</span>
+      </label>
+      <small class="field-hint">تنها درخواستی که پیش‌فرض روشن است: روزی یک بار شمارهٔ آخرین نسخه از گیت‌هاب خوانده می‌شود. هیچ دادهٔ تو فرستاده نمی‌شود.</small>
+      <div class="field-status" id="updatePermNote" hidden></div>
+      <div id="updateHowBox"></div>
+    </details>
+
     <h2 class="set-group">اتصال‌ها</h2>
 
 <details class="set-acc" open>
@@ -687,12 +706,6 @@
         <span>کارت «اخبار» در صفحهٔ امروز</span>
       </label>
       <label class="field-check">
-        <input type="checkbox" id="setUpdateCheck">
-        <span>خبرم کن اگر نسخهٔ تازه‌ای منتشر شد</span>
-      </label>
-      <small class="field-hint">تنها درخواستی که پیش‌فرض روشن است: روزی یک بار شمارهٔ آخرین نسخه از گیت‌هاب خوانده می‌شود. هیچ دادهٔ تو فرستاده نمی‌شود.</small>
-      <div class="field-status" id="updatePermNote" hidden></div>
-      <label class="field-check">
         <input type="checkbox" id="setWeatherOn">
         <span>آب‌وهوا (سربرگ + کارت کیوسک)</span>
       </label>
@@ -772,10 +785,6 @@
     </details>
   </div>
   <p class="settings-foot">منشی هیچ سروری ندارد — همهٔ داده‌ها در حافظهٔ محلی مرورگر شماست. نکته: در نوار آدرس بنویسید «منشی» + فاصله تا از همان‌جا کار ثبت کنید.</p>
-  <p class="settings-version">نسخهٔ <span id="appVersion">—</span>
-    <button type="button" class="btn-link" id="checkUpdate">بررسی نسخهٔ تازه</button>
-    <button type="button" class="btn-link" id="applyUpdate" hidden>اعمال نسخهٔ تازه</button>
-    <span class="field-status" id="updateStatus"></span></p>
 </section>
 
 </main>

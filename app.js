@@ -815,7 +815,7 @@
       updateCheckOn: s.updateCheckOn !== false
     };
     const uc = $('#setUpdateCheck');
-    if (uc) { uc.checked = heroPrefs.updateCheckOn; uc.onchange = () => { heroPrefs.updateCheckOn = uc.checked; paintUpdatePermNote(); }; }
+    if (uc) { uc.checked = heroPrefs.updateCheckOn; uc.onchange = () => { heroPrefs.updateCheckOn = uc.checked; paintUpdatePermNote(); paintUpdateDot(); }; }
     paintUpdatePermNote();
     const wc = $('#setWeatherOn');
     if (wc) { wc.checked = heroPrefs.weatherOn; wc.onchange = () => { heroPrefs.weatherOn = wc.checked; }; }
@@ -6269,6 +6269,8 @@
     renderNews(settings);
     checkUpdateQuietly();
     paintApplyRow();
+    paintUpdateHow();
+    paintUpdateDot();
     sayIfUpdated();
   }
 
@@ -7381,11 +7383,21 @@
   // «چطور به‌روز کنم؟» — بسته، کنارِ خودِ خبر. کسی که بلد است بازش نمی‌کند و
   // کسی که بلد نیست لازم نیست جای دیگری دنبالش بگردد.
   async function updateHow() {
+    const kind = await installKind();
     const box = el('details', 'update-how');
     box.append(el('summary', null, 'چطور به‌روز کنم؟'));
     const ol = el('ol');
-    for (const s of Updater.updateSteps(await installKind())) ol.append(el('li', null, s));
-    box.append(ol, el('p', 'update-warn', Updater.STEPS_WARN));
+    for (const s of Updater.updateSteps(kind)) ol.append(el('li', null, s));
+    box.append(ol);
+    // «صفحهٔ ریلیز» بدونِ لینک یعنی کاربر باید خودش پیدایش کند
+    if (kind !== 'git') {
+      const p = el('p', 'update-link');
+      const a = el('a', 'btn-link', 'باز کردنِ صفحهٔ ریلیز در گیت‌هاب');
+      a.href = Updater.PAGE; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      p.append(a);
+      box.append(p);
+    }
+    box.append(el('p', 'update-warn', Updater.STEPS_WARN));
     return box;
   }
 
@@ -7486,7 +7498,7 @@
       });
       acts.append(get);
     }
-    const go = el('a', hasFS && settingsNow?.bridgeOn ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm', 'دیدن نسخهٔ تازه');
+    const go = el('a', hasFS && settingsNow?.bridgeOn ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm', 'گرفتن از گیت‌هاب');
     go.href = rel.url; go.target = '_blank'; go.rel = 'noopener noreferrer';
     const later = el('button', 'btn btn-ghost btn-sm', 'بعداً');
     later.addEventListener('click', async () => {
@@ -7495,6 +7507,39 @@
     });
     acts.append(go, later);
     box.append(acts, await updateHow());
+  }
+
+  // نقطهٔ کنارِ «تنظیمات و به‌روزرسانی» در ریل. سه چیز روشنش می‌کند و هر سه
+  // واقعاً کاری‌اند که مانده:
+  //   • نسخه‌ای روی دیسک منتظرِ اعمال است
+  //   • نسخهٔ تازه‌ای منتشر شده و هنوز ندیده‌ای
+  //   • تیکِ «خبرم کن» روشن است ولی اجازهٔ گیت‌هاب داده نشده — یعنی وعده‌ای که
+  //     آن تیک می‌دهد اصلاً عمل نمی‌شود و جایی هم گفته نمی‌شود
+  //
+  // بدونِ این، هر سه فقط وقتی دیده می‌شوند که کاربر خودش سراغِ تنظیمات برود.
+  async function paintUpdateDot() {
+    const dot = $('#updateDot');
+    if (!dot) return;
+    let need = false;
+    try {
+      const s = await Store.getSettings();
+      const cur = await appVersion();
+      if (await pendingVersion({ settle: 0 })) need = true;
+      else if (s.lastRelease?.version && cur && Updater.isNewer(s.lastRelease.version, cur)
+               && s.updateSeen !== s.lastRelease.version) need = true;
+      else if (s.updateCheckOn && Store.isExt && chrome.permissions) {
+        // اگر نشد بفهمیم، ادعا نمی‌کنیم چیزی کم است
+        try { need = !(await chrome.permissions.contains({ origins: [GH_ORIGIN] })); } catch (_) { need = false; }
+      }
+    } catch (_) { need = false; }
+    dot.hidden = !need;
+  }
+
+  // راهنمای «چطور به‌روز کنم؟» در تنظیمات — همیشه، نه فقط وقتی خبری هست
+  async function paintUpdateHow() {
+    const box = $('#updateHowBox');
+    if (!box) return;
+    box.replaceChildren(await updateHow());
   }
 
   // دکمهٔ «اعمال» در ردیفِ نسخه در تنظیمات. فقط وقتی دیده می‌شود که واقعاً
@@ -7556,22 +7601,30 @@
   // بدونِ تایمرِ پاک‌شدن، چون دکمه‌ای که وسطِ خواندن ناپدید شود بدتر از نبودنش است.
   async function updateSayNewer(rel) {
     const st = $('#updateStatus');
+    if (!st) return;
     const s = await Store.getSettings();
-    if (!st || !hasFS || !s.bridgeOn) {
-      updateSay(`نسخهٔ ${J.faDigits(rel.version)} هست — بالای صفحهٔ «امروز» ببین`, 'ok');
-      return;
-    }
     clearTimeout(updateStatusTimer);
     st.className = 'field-status ok';
     st.replaceChildren(document.createTextNode(`نسخهٔ ${J.faDigits(rel.version)} هست — `));
-    const btn = el('button', 'btn-link', 'گرفتن و اعمال');
-    btn.type = 'button';
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      const r = await requestPull(rel.version);
-      updateSay(PULL_SAY[r] || 'نشد', r === 'ok' ? 'ok' : 'err');
-    });
-    st.append(btn);
+
+    // نصبِ گیتی: همین‌جا بگیر و اعمال کن
+    if (hasFS && s.bridgeOn) {
+      const btn = el('button', 'btn-link', 'گرفتن و اعمال');
+      btn.type = 'button';
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const r = await requestPull(rel.version);
+        updateSay(PULL_SAY[r] || 'نشد', r === 'ok' ? 'ok' : 'err');
+      });
+      st.append(btn);
+      return;
+    }
+    // بقیه: پیشترها اینجا نوشته می‌شد «بالای صفحهٔ امروز ببین» — یعنی خبر بود
+    // و راهِ گرفتنش نبود. لینکِ همان نسخه باید همین‌جا باشد.
+    const link = el('a', 'btn-link', 'گرفتن از گیت‌هاب');
+    link.href = rel.url || Updater.PAGE;
+    link.target = '_blank'; link.rel = 'noopener noreferrer';
+    st.append(link);
   }
 
   async function runUpdateCheck() {
@@ -7591,6 +7644,7 @@
       await paintUpdateBanner(rel, { updateSeen: '' });
     } else updateSay('همین نسخه تازه‌ترین است ✓', 'ok');
     paintApplyRow();
+    paintUpdateDot();
   }
 
   $('#checkUpdate')?.addEventListener('click', runUpdateCheck);
@@ -7622,6 +7676,7 @@
       box.className = 'field-status ok';
       box.replaceChildren(document.createTextNode('دسترسی داده شد ✓'));
       checkUpdateQuietly();                       // همان لحظه یک بار بررسی کن
+      paintUpdateDot();
       setTimeout(paintUpdatePermNote, 4000);      // بعد خودش را جمع می‌کند
     });
     box.append(btn);

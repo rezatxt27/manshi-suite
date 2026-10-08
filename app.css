@@ -120,6 +120,11 @@ body {
   min-width: 20px; height: 20px; border-radius: 999px; flex: none !important;
   display: inline-flex; align-items: center; justify-content: center; padding: 0 6px;
 }
+/* نشانِ بی‌عدد: «کاری مانده»، نه «چندتا مانده» */
+.rail-dot {
+  width: 8px; height: 8px; border-radius: 999px; flex: none !important;
+  background: var(--accent); align-self: center;
+}
 .workspace { flex: 1; min-width: 0; }
 html[data-theme="light"] .rail-item .ic-sun { display: none; }
 html:not([data-theme="light"]) .rail-item .ic-moon { display: none; }
@@ -999,11 +1004,15 @@ button.chip { min-height: 30px; display: inline-flex; align-items: center; }
 /* پیش‌تر همه‌چیز در یک خطِ وسط‌چین جمع می‌شد و پیامِ بلند وسطِ عبارت می‌شکست
    («گیت‌هاب دسترسی / ندارد — اجازه بده»). حالا نسخه و دکمه کنارِ هم می‌مانند و
    پیام همیشه خطِ خودش را دارد. */
-.settings-version { color: var(--text-3); font-size: 12px; margin-top: 6px; font-variant-numeric: tabular-nums;
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px 8px; }
-.settings-version span { font-weight: 700; color: var(--text-2); }
-.settings-version #updateStatus { flex-basis: 100%; }
-.settings-version #updateStatus:empty { display: none; }
+/* ردیفِ نسخه حالا بالای تنظیمات است، نه ته صفحه — نسخه و دکمه‌ها کنارِ هم،
+   و پیام همیشه خطِ خودش را دارد تا وسطِ عبارت نشکند. */
+.set-version { color: var(--text-2); font-size: 13px; margin: 0 0 10px; font-variant-numeric: tabular-nums;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.set-version #appVersion { font-weight: 700; color: var(--text); }
+#updateStatus:empty, #updateHowBox:empty { display: none; }
+#updateHowBox { margin-top: 12px; }
+.update-how .update-link { margin: 8px 0 0; }
+#updateHowBox .update-how { font-size: 13px; }
 
 /* ── مودال و توست ──────────────────────── */
 .modal-wrap {
@@ -1847,9 +1856,11 @@ button.kpi { font: inherit; color: var(--text); }
   .rail-brand { justify-content: center; padding: 6px 0 14px; }
   .brand-name { display: none; }
   .rail-item { justify-content: center; padding: 11px 0; position: relative; gap: 0; }
-  .rail-item > span:not(.rail-badge) { display: none; }
+  .rail-item > span:not(.rail-badge):not(.rail-dot) { display: none; }
   .rail-item svg { width: 20px; height: 20px; }
   .rail-badge { position: absolute; top: 3px; inset-inline-end: 5px; min-width: 16px; height: 16px; font-size: 10px; padding: 0 4px; }
+  /* در ریلِ باریک متن نیست، پس نقطه گوشهٔ آیکون می‌نشیند */
+  .rail-dot { position: absolute; top: 7px; inset-inline-end: 9px; }
 }
 @media (max-width: 560px) { main { padding: 16px 13px 52px; } }
 
