@@ -6269,6 +6269,7 @@
     renderNews(settings);
     checkUpdateQuietly();
     paintApplyRow();
+    sayIfUpdated();
   }
 
   // ---------- کیوسک ----------
@@ -7299,20 +7300,82 @@
     return currentVersion;
   }
 
-  // نسخهٔ روی دیسک. اگر منشی با کلونِ گیت نصب شده باشد و اسکریپتِ
-  // `tools/manshi-pull.sh` شبانه `git pull` زده باشد، فایل‌های روی دیسک
-  // تازه‌اند ولی کروم همان نسخهٔ قبلی را بار کرده. کروم منابعِ افزونهٔ unpacked
-  // را از دیسک می‌خواند، پس این عدد نسخهٔ واقعیِ روی دیسک است. اگر روزی از کش
-  // بدهد، فقط حالتِ «اعمال» دیده نمی‌شود — چیزی خراب نمی‌شود.
+  // نسخهٔ روی دیسک. اگر منشی با کلونِ گیت نصب شده باشد و `git pull` خورده باشد،
+  // فایل‌های روی دیسک تازه‌اند ولی کروم همان نسخهٔ قبلی را بار کرده. کروم منابعِ
+  // افزونهٔ unpacked را از دیسک می‌خواند، پس این عدد نسخهٔ واقعیِ روی دیسک است.
+  //
+  // آدرس پارامترِ زمان دارد: `no-store` تنها همیشه کافی نیست و همان فایلِ
+  // قبلی برمی‌گردد.
   async function diskVersion() {
     try {
-      const v = (await (await fetch('manifest.json', { cache: 'no-store' })).json())?.version;
+      const base = chrome?.runtime?.getURL ? chrome.runtime.getURL('manifest.json') : 'manifest.json';
+      const r = await fetch(base + '?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return '';
+      const v = JSON.parse(await r.text())?.version;
       return typeof v === 'string' ? v : '';
     } catch (_) { return ''; }
   }
 
-  // بارِ دوبارهٔ افزونه، که همین صفحه را هم می‌بندد. پس پیش از رفتن نشانه‌ای
-  // می‌گذاریم تا سرویس‌ورکر بعد از بالا آمدن منشی را دوباره باز کند.
+  // نسخهٔ تازه‌ای که روی دیسک نشسته و منتظرِ اعمال است — وگرنه رشتهٔ خالی.
+  //
+  // دو بار خوانده می‌شود، با کمی فاصله: وقتی فایل‌ها در حالِ کپی‌شدن‌اند،
+  // manifest ممکن است نیمه‌کاره یا در حالِ تغییر باشد. اگر دو خواندن یکی نبود،
+  // یعنی کار تمام نشده و این لحظه وقتِ اعمال نیست.
+  const SETTLE_MS = 1200;
+  async function pendingVersion({ settle = SETTLE_MS } = {}) {
+    const [loaded, disk] = [await appVersion(), await diskVersion()];
+    if (Updater.applyState({ loaded, disk }) !== 'ready') return '';
+    if (settle) {
+      await new Promise(r => setTimeout(r, settle));
+      if (await diskVersion() !== disk) return '';
+    }
+    return disk;
+  }
+
+  // ── درخواستِ گرفتنِ نسخهٔ تازه ─────────────────────
+  // کروم به‌محضِ عوض‌شدنِ manifest.json افزونه را از نو بار می‌کند. پس اگر
+  // `git pull` شبانه اجرا شود، به‌روزرسانی خودبه‌خود — و شاید وسطِ کارت — اعمال
+  // می‌شود. برای اینکه تصمیم دستِ خودت باشد، منشی به گیت دست نمی‌زند و فقط یک
+  // فایلِ کوچک در همان پوشهٔ snapshot می‌گذارد (دسترسی‌اش را از قبل داده‌ای).
+  // اسکریپتِ `tools/manshi-pull.sh --if-requested` آن را می‌بیند، کد را جلو
+  // می‌برد و فایل را پاک می‌کند.
+  //
+  // محتوای فایل هیچ‌جا تفسیر نمی‌شود — خودِ بودنش درخواست است.
+  const PULL_FLAG = 'apply-update.json';
+  async function requestPull(wantVersion) {
+    if (!hasFS) return 'no-fs';
+    const s = await Store.getSettings();
+    if (!s.bridgeOn) return 'off';
+    const dir = await bridgeDir(true);           // کلیکِ کاربر، پس ask مجاز است
+    if (!dir) return 'no-permission';
+    try {
+      const fh = await dir.getFileHandle(PULL_FLAG, { create: true });
+      const w = await fh.createWritable();
+      await w.write(JSON.stringify({ at: Date.now(), from: await appVersion(), want: String(wantVersion || '') }, null, 2));
+      await w.close();
+      return 'ok';
+    } catch (_) { return 'failed'; }
+  }
+
+  const PULL_SAY = {
+    ok: 'درخواست ثبت شد — نسخهٔ تازه تا یک دقیقهٔ آینده می‌آید و منشی از نو بار می‌شود',
+    off: 'برای این کار «فایل snapshot» در تنظیمات باید روشن باشد',
+    'no-permission': 'دسترسی به پوشهٔ snapshot داده نشد',
+    'no-fs': 'این مرورگر از انتخابِ پوشه پشتیبانی نمی‌کند',
+    failed: 'نوشتنِ درخواست نشد'
+  };
+
+  // تب‌های بازِ خودِ منشی. بارِ دوباره همه‌شان را می‌بندد، پس آدرسشان را
+  // برمی‌داریم تا سرویس‌ورکر برشان گرداند. اگر کروم نتواند بگوید، فهرست خالی
+  // می‌ماند و فقط همین صفحه برمی‌گردد.
+  async function openAppUrls() {
+    try {
+      const ctx = await chrome.runtime.getContexts({ contextTypes: ['TAB'] });
+      return ctx.map(c => c.documentUrl).filter(u => u && u.includes('/app.html'));
+    } catch (_) { return []; }
+  }
+
+  // بارِ دوبارهٔ افزونه، که هر تبِ بازِ منشی را هم می‌بندد.
   //
   // عمداً تأیید می‌گیریم: بارِ دوباره، content script روی Meet را یتیم می‌کند و
   // ثبتِ در جریان قطع می‌شود. این تصمیم باید دستِ کاربر باشد، نه خودکار.
@@ -7320,9 +7383,31 @@
     if (!Store.isExt || !chrome.runtime?.reload) return false;
     const ok = confirm('منشی از نو بار می‌شود تا نسخهٔ تازه اعمال شود.\n\nاگر جلسه‌ای در حال ثبت است، اول ثبت را متوقف کن — بارِ دوباره آن را قطع می‌کند.');
     if (!ok) return false;
-    try { await chrome.storage.local.set({ reopenAppAt: Date.now() }); } catch (_) {}
+    // همین صفحه آخرِ فهرست می‌رود تا بعد از بازگشت، فوکوس روی آن باشد — و با
+    // آدرسِ زندهٔ خودش، که نمای فعلی در هشِ آن است
+    const here = location.href;
+    const urls = (await openAppUrls()).filter(u => u !== here);
+    urls.push(here);
+    const from = await appVersion();
+    try { await chrome.storage.local.set({ updateState: { reopen: urls.slice(-5), from, at: Date.now() } }); } catch (_) {}
     chrome.runtime.reload();
     return true;
+  }
+
+  // بعد از بارِ دوباره: اگر نسخه عوض شده، یک بار خبر بده. شرطِ زمان برای این
+  // است که نشانهٔ جامانده، هفتهٔ بعد پیامِ بی‌ربط نسازد.
+  async function sayIfUpdated() {
+    if (!Store.isExt || !chrome.storage?.local) return;
+    let st;
+    try { st = (await chrome.storage.local.get('updateState')).updateState; } catch (_) { return; }
+    if (!st || st.shown || !st.from) return;
+    const now = await appVersion();
+    if (Date.now() - (st.at || 0) > 180000 || !Updater.isNewer(now, st.from)) {
+      try { await chrome.storage.local.remove('updateState'); } catch (_) {}
+      return;
+    }
+    toast(`منشی به نسخهٔ ${J.faDigits(now)} به‌روز شد`);
+    try { await chrome.storage.local.set({ updateState: { ...st, shown: true } }); } catch (_) {}
   }
 
   async function paintUpdateBanner(rel, settings) {
@@ -7330,7 +7415,7 @@
     if (!box) return;
     const cur = await appVersion();
     if (!cur) { box.hidden = true; return; }   // تا نسخهٔ خودمان معلوم نشده، چیزی ادعا نکن
-    const disk = await diskVersion();
+    const disk = await pendingVersion();
     const state = Updater.applyState({ loaded: cur, disk, remote: rel?.version || '' });
 
     // دیسک جلوتر است: این حالت بر خبرِ انتشار مقدم است، چون با یک کلیک تمام
@@ -7361,11 +7446,23 @@
     box.hidden = false;
     box.replaceChildren();
     const body = el('div', 'update-body');
-    body.append(el('strong', null, `نسخهٔ ${J.faDigits(rel.version)} منتشر شد`));
-    body.append(el('span', null, `نسخهٔ تو ${J.faDigits(cur)} است — منشی خودش به‌روز نمی‌شود و باید دستی بگیری.`));
+    const line = el('span', null, `نسخهٔ تو ${J.faDigits(cur)} است — منشی خودش به‌روز نمی‌شود و باید دستی بگیری.`);
+    body.append(el('strong', null, `نسخهٔ ${J.faDigits(rel.version)} منتشر شد`), line);
     box.append(body);
     const acts = el('div', 'update-acts');
-    const go = el('a', 'btn btn-primary btn-sm', 'دیدن نسخهٔ تازه');
+    // نصبِ گیتی: همین‌جا درخواست بده، لازم نیست جایی بروی
+    const settingsNow = settings || await Store.getSettings();
+    if (hasFS && settingsNow?.bridgeOn) {
+      const get = el('button', 'btn btn-primary btn-sm', 'گرفتن و اعمال');
+      get.addEventListener('click', async () => {
+        get.disabled = true;
+        const r = await requestPull(rel.version);
+        line.textContent = PULL_SAY[r] || 'نشد';
+        if (r !== 'ok') get.disabled = false;
+      });
+      acts.append(get);
+    }
+    const go = el('a', hasFS && settingsNow?.bridgeOn ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm', 'دیدن نسخهٔ تازه');
     go.href = rel.url; go.target = '_blank'; go.rel = 'noopener noreferrer';
     const later = el('button', 'btn btn-ghost btn-sm', 'بعداً');
     later.addEventListener('click', async () => {
@@ -7382,10 +7479,9 @@
   async function paintApplyRow() {
     const btn = $('#applyUpdate');
     if (!btn) return;
-    const [loaded, disk] = [await appVersion(), await diskVersion()];
-    const ready = Updater.applyState({ loaded, disk }) === 'ready';
-    btn.hidden = !ready;
-    if (ready) btn.textContent = `اعمال نسخهٔ ${J.faDigits(disk)}`;
+    const disk = await pendingVersion();
+    btn.hidden = !disk;
+    if (disk) btn.textContent = `اعمال نسخهٔ ${J.faDigits(disk)}`;
   }
 
   $('#applyUpdate')?.addEventListener('click', applyUpdateNow);
@@ -7432,6 +7528,28 @@
     st.append(btn);
   }
 
+  // خبرِ نسخهٔ تازه در ردیفِ تنظیمات. در نصبِ گیتی، دکمهٔ گرفتنش همان‌جاست —
+  // بدونِ تایمرِ پاک‌شدن، چون دکمه‌ای که وسطِ خواندن ناپدید شود بدتر از نبودنش است.
+  async function updateSayNewer(rel) {
+    const st = $('#updateStatus');
+    const s = await Store.getSettings();
+    if (!st || !hasFS || !s.bridgeOn) {
+      updateSay(`نسخهٔ ${J.faDigits(rel.version)} هست — بالای صفحهٔ «امروز» ببین`, 'ok');
+      return;
+    }
+    clearTimeout(updateStatusTimer);
+    st.className = 'field-status ok';
+    st.replaceChildren(document.createTextNode(`نسخهٔ ${J.faDigits(rel.version)} هست — `));
+    const btn = el('button', 'btn-link', 'گرفتن و اعمال');
+    btn.type = 'button';
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const r = await requestPull(rel.version);
+      updateSay(PULL_SAY[r] || 'نشد', r === 'ok' ? 'ok' : 'err');
+    });
+    st.append(btn);
+  }
+
   async function runUpdateCheck() {
     updateSay('در حال بررسی…');
     const { rel, error, needsPermission } = await fetchRelease();
@@ -7439,13 +7557,13 @@
     if (error) { updateSay(error, 'err'); return; }
     const cur = await appVersion();
     await Store.saveSettings({ updateCheckedAt: Date.now(), lastRelease: rel, updateSeen: '' });
-    const disk = await diskVersion();
-    if (Updater.applyState({ loaded: cur, disk }) === 'ready') {
+    const disk = await pendingVersion();
+    if (disk) {
       // نسخه از قبل گرفته شده و فقط بارِ دوباره مانده — همین را بگو، نه «برو بگیر»
       updateSay(`نسخهٔ ${J.faDigits(disk)} روی دیسک آماده است — اعمالش کن`, 'ok');
       await paintUpdateBanner(rel, { updateSeen: '', applySeen: '' });
     } else if (Updater.isNewer(rel.version, cur)) {
-      updateSay(`نسخهٔ ${J.faDigits(rel.version)} هست — بالای صفحهٔ «امروز» ببین`, 'ok');
+      await updateSayNewer(rel);
       await paintUpdateBanner(rel, { updateSeen: '' });
     } else updateSay('همین نسخه تازه‌ترین است ✓', 'ok');
     paintApplyRow();
