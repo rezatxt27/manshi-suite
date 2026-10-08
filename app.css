@@ -2678,6 +2678,11 @@ small { font-size: 12px; }
 .update-body strong { font-size: 13.5px; color: var(--accent-text); }
 .update-body span { font-size: 12.5px; color: var(--text-2); }
 .update-acts { display: flex; gap: 7px; flex: none; }
+/* راهنمای به‌روزرسانی: خطِ خودش را می‌گیرد تا دکمه‌ها را به خطِ بعد نراند */
+.update-how { flex-basis: 100%; font-size: 12.5px; color: var(--text-2); }
+.update-how > summary { cursor: pointer; font-weight: 700; color: var(--accent-text); }
+.update-how ol { margin: 8px 0 0; padding-inline-start: 20px; display: flex; flex-direction: column; gap: 4px; }
+.update-how .update-warn { margin: 8px 0 0; color: var(--text-3); }
 .btn-link {
   background: none; border: 0; padding: 0 6px; font: inherit; font-size: 12px;
   font-weight: 700; color: var(--accent-text); cursor: pointer;

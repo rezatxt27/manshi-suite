@@ -2599,6 +2599,54 @@ t('peopleFiles گروه‌بندی درست', () => {
     // دیسکِ عقب‌تر یعنی کاربر دستی برگشته — بارِ دوباره کارش را خراب می‌کند
     t('اعمال: دیسکِ عقب‌تر «آماده» نیست', () =>
       assert.strictEqual(U.applyState({ loaded: '1.7.0', disk: '1.6.0' }), 'current'));
+
+    // ── دستورِ به‌روزرسانی ──
+    t('راهنما: نصبِ زیپ و نصبِ گیتی دو مسیرِ جدا دارند', () => {
+      assert.notDeepStrictEqual(U.updateSteps('zip'), U.updateSteps('git'));
+      assert.ok(U.updateSteps('zip').some(s => s.includes('chrome://extensions')));
+      assert.ok(U.updateSteps('git').some(s => s.includes('manshi-pull.sh')));
+    });
+    t('راهنما: نوعِ ناشناس به مسیرِ زیپ می‌افتد', () => {
+      for (const k of ['', null, undefined, 'چیزی']) assert.deepStrictEqual(U.updateSteps(k), U.STEPS.zip, String(k));
+    });
+    t('راهنما: فهرستِ برگشتی کپی است، نه خودِ جدول', () => {
+      U.updateSteps('zip').push('دست‌کاری');
+      assert.ok(!U.STEPS.zip.includes('دست‌کاری'), 'جدولِ اصلی نباید عوض شود');
+    });
+    // بدونِ این هشدار، کاربر پوشهٔ تازه می‌سازد و داده‌هایش را گم می‌کند
+    t('راهنما: هشدارِ عوض‌نکردنِ مسیرِ پوشه هست', () =>
+      assert.ok(U.STEPS_WARN.includes('مسیر') && U.STEPS_WARN.length > 40));
+  }
+
+  // ── یادداشتِ ریلیز ──────────────────────────────────
+  {
+    console.log('\n— یادداشت ریلیز —');
+    const RN = require('../.github/scripts/release-notes.js');
+    const CL = [
+      '# تاریخچهٔ نسخه‌ها', '', '---', '',
+      '## ۲٫۰٫۰ — عنوانِ تازه', '', 'متنِ نسخهٔ تازه.', '', '---', '',
+      '## ۱٫۹٫۰ — عنوانِ قبلی', '', 'متنِ قبلی.', ''
+    ].join('\n');
+
+    t('بخشِ درستِ CHANGELOG درمی‌آید', () => {
+      assert.strictEqual(RN.extract(CL, '2.0.0'), 'متنِ نسخهٔ تازه.');
+      assert.strictEqual(RN.extract(CL, '1.9.0'), 'متنِ قبلی.');
+    });
+    t('نسخهٔ نبوده، متنِ خالی می‌دهد', () =>
+      assert.strictEqual(RN.extract(CL, '9.9.9'), ''));
+    t('راهنمای به‌روزرسانی ته هر ریلیز می‌آید', () => {
+      const out = RN.notes(CL, '2.0.0');
+      assert.ok(out.startsWith('متنِ نسخهٔ تازه.'), 'اول خودِ متنِ نسخه');
+      assert.ok(out.includes('چطور به‌روز کنم؟'));
+      assert.ok(out.includes('chrome://extensions'));
+      assert.ok(out.includes('manshi-pull.sh'), 'مسیرِ نصبِ گیتی هم باید باشد');
+    });
+    // نسخه‌ای که هنوز بخشِ CHANGELOG ندارد نباید ریلیزِ بی‌راهنما بسازد
+    t('نسخهٔ بی‌بخش هم راهنما را دارد', () => {
+      const out = RN.notes(CL, '9.9.9');
+      assert.ok(out.includes('۹٫۹٫۹'));
+      assert.ok(out.includes('چطور به‌روز کنم؟'));
+    });
   }
 
   // ── عکسِ لحظه‌ای و زمینهٔ کلیپ‌بورد ──────────────────

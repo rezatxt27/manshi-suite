@@ -61,6 +61,26 @@ jobs:
         if: steps.check.outputs.exists == 'false'
         run: node .github/scripts/release-notes.js "${{ steps.v.outputs.version }}" > /tmp/notes.md
 
+      # «Source code (zip)» که خودِ گیت‌هاب می‌سازد، تصاویر و ویدیوهای README را
+      # هم دارد — ده‌ها مگابایت که به کارِ نصب نمی‌آید. این بسته فقط چیزی را
+      # دارد که افزونه لازم دارد، و نامش می‌گوید چیست.
+      - name: ساخت بستهٔ نصب
+        if: steps.check.outputs.exists == 'false'
+        id: pack
+        run: |
+          NAME="manshi-${{ steps.v.outputs.version }}"
+          # پوشهٔ داخلِ زیپ همیشه «manshi» است، نه نام‌دارِ نسخه: کروم شناسهٔ
+          # افزونه را از مسیرِ پوشه می‌سازد، و پوشه‌ای که هر نسخه اسمش عوض شود
+          # یعنی هر بار یک افزونهٔ تازه با حافظهٔ خالی.
+          mkdir -p /tmp/pack/manshi
+          rsync -a ./ /tmp/pack/manshi/ \
+            --exclude '.git' --exclude '.github' --exclude '.githooks' \
+            --exclude 'docs' --exclude 'tests' --exclude 'tools' \
+            --exclude '.DS_Store'
+          (cd /tmp/pack && zip -qr "/tmp/$NAME.zip" manshi)
+          echo "zip=/tmp/$NAME.zip" >> "$GITHUB_OUTPUT"
+          du -h "/tmp/$NAME.zip"
+
       - name: ساخت ریلیز
         if: steps.check.outputs.exists == 'false'
         run: |
@@ -68,6 +88,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "منشی ${{ steps.v.outputs.version }}" \
             --notes-file /tmp/notes.md \
-            --target "$GITHUB_SHA"
+            --target "$GITHUB_SHA" \
+            "${{ steps.pack.outputs.zip }}"
         env:
           GH_TOKEN: ${{ github.token }}

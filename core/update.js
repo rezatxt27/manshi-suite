@@ -70,7 +70,27 @@ const Updater = (() => {
     return 'current';
   }
 
-  const api = { REPO, API, PAGE, CHECK_EVERY_MS, parseVersion, compareVersions, isNewer, parseRelease, dueForCheck, applyState };
+  // ── دستورِ به‌روزرسانی ───────────────────────────────
+  // خبرِ نسخهٔ تازه بدونِ دستورش نصفه است. دو نصب دو مسیرِ متفاوت دارند و
+  // نشان‌دادنِ هر دو با هم فقط گیج می‌کند، پس هرکس مالِ خودش را می‌بیند.
+  const STEPS = {
+    zip: [
+      'فایلِ zip نسخهٔ تازه را از صفحهٔ ریلیز بگیر و باز کن',
+      'فایل‌های داخلش را در همان پوشهٔ فعلیِ منشی بریز و بگذار جایگزین شوند',
+      'در chrome://extensions روی کارتِ منشی دکمهٔ ⟳ را بزن'
+    ],
+    git: [
+      'در پوشهٔ منشی این را بزن: sh tools/manshi-pull.sh',
+      'اگر کروم خودش بار نکرد، همین‌جا «اعمال کن» را بزن'
+    ]
+  };
+
+  // مهم‌ترین نکته، چون برگشت‌ناپذیر است: مسیرِ تازه یعنی افزونهٔ تازه با حافظهٔ خالی
+  const STEPS_WARN = 'پوشهٔ تازه نساز و اسمِ پوشه را عوض نکن — کروم شناسهٔ افزونه را از مسیرِ پوشه می‌سازد، و با مسیرِ تازه منشی با حافظهٔ خالی بالا می‌آید و داده‌هایت در نسخهٔ قبلی جا می‌مانند.';
+
+  const updateSteps = (kind) => (STEPS[kind] || STEPS.zip).slice();
+
+  const api = { REPO, API, PAGE, CHECK_EVERY_MS, parseVersion, compareVersions, isNewer, parseRelease, dueForCheck, applyState, STEPS, STEPS_WARN, updateSteps };
   if (typeof globalThis !== 'undefined') globalThis.Updater = api;
   return api;
 })();

@@ -7365,6 +7365,30 @@
     failed: 'نوشتنِ درخواست نشد'
   };
 
+  // نصبِ گیتی یا نصبِ زیپ؟ بستهٔ زیپ پوشهٔ `tools/` را ندارد، پس بودنِ همین
+  // فایل جواب را می‌دهد. اگر خواندنش نشد، مسیرِ زیپ نشان داده می‌شود — مسیرِ
+  // اکثریت، و ضررِ نشان‌دادنش به کاربرِ گیتی هم چیزی نیست.
+  let installKindCache = '';
+  async function installKind() {
+    if (installKindCache) return installKindCache;
+    try {
+      const base = chrome?.runtime?.getURL ? chrome.runtime.getURL('tools/manshi-pull.sh') : 'tools/manshi-pull.sh';
+      installKindCache = (await fetch(base, { cache: 'no-store' })).ok ? 'git' : 'zip';
+    } catch (_) { installKindCache = 'zip'; }
+    return installKindCache;
+  }
+
+  // «چطور به‌روز کنم؟» — بسته، کنارِ خودِ خبر. کسی که بلد است بازش نمی‌کند و
+  // کسی که بلد نیست لازم نیست جای دیگری دنبالش بگردد.
+  async function updateHow() {
+    const box = el('details', 'update-how');
+    box.append(el('summary', null, 'چطور به‌روز کنم؟'));
+    const ol = el('ol');
+    for (const s of Updater.updateSteps(await installKind())) ol.append(el('li', null, s));
+    box.append(ol, el('p', 'update-warn', Updater.STEPS_WARN));
+    return box;
+  }
+
   // تب‌های بازِ خودِ منشی. بارِ دوباره همه‌شان را می‌بندد، پس آدرسشان را
   // برمی‌داریم تا سرویس‌ورکر برشان گرداند. اگر کروم نتواند بگوید، فهرست خالی
   // می‌ماند و فقط همین صفحه برمی‌گردد.
@@ -7470,7 +7494,7 @@
       box.hidden = true;
     });
     acts.append(go, later);
-    box.append(acts);
+    box.append(acts, await updateHow());
   }
 
   // دکمهٔ «اعمال» در ردیفِ نسخه در تنظیمات. فقط وقتی دیده می‌شود که واقعاً
